@@ -1,0 +1,6 @@
+{
+  "name": "Plan Board",
+  "description": "Collaborative event-planning platform where friends build and organize plans together.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
