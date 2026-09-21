@@ -7,6 +7,7 @@ export interface BoardMember {
   role: MemberRole;
   responsibility?: string;
   isCurrentUser?: boolean;
+  joinedViaInvite?: boolean;
 }
 
 export type ItemType = 'decision' | 'suggestion' | 'task' | 'contribution' | 'information';
@@ -19,6 +20,7 @@ export interface DecisionOption {
   emoji?: string;
   voteCount: number;
   voterIds: string[];
+  suggestionId?: string;
 }
 
 export interface DecisionItem {
@@ -76,6 +78,7 @@ export interface SuggestionItem {
   planId?: string; // ID of the Plan this suggestion is locked to
   planTitle?: string; // Title of the Plan (e.g. "Location", "Music")
   planEmoji?: string; // Emoji of the Plan (e.g. "📍", "🎵")
+  link?: string; // Optional supplementary external link/URL
 }
 
 export interface TaskItem {
@@ -293,6 +296,16 @@ export interface PlanBoard {
   description: string;
   members: BoardMember[];
   
+  // Custom board identity for creator if configured
+  creatorCustomIdentity?: {
+    useCustomName: boolean;
+    displayName: string;
+    avatar: string;
+  };
+  creatorCustomName?: string;
+  creatorCustomAvatar?: string;
+  useCustomName?: boolean;
+
   // Attached Plans on this Board
   plans: AttachedPlan[];
 

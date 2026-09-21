@@ -17,6 +17,8 @@ import {
 import { ImagePosition, SuggestionImageItem } from '../types';
 import { ImageFramePositioner } from './ImageFramePositioner';
 import { DEFAULT_IMAGE_POSITION, getImageStyle } from '../utils/imagePosition';
+import { CornerCheckBadge } from './SelectionBadge';
+import { compressImageFile } from '../utils/imageCompressor';
 
 export interface SystemImageOption {
   url: string;
@@ -119,20 +121,24 @@ export const ImagePickerField: React.FC<ImagePickerFieldProps> = ({
     );
 
     const readPromises = eligibleFiles.map(
-      (file) =>
-        new Promise<SuggestionImageItem>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            resolve({
-              id: `up-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-              url: reader.result as string,
-              title: file.name.replace(/\.[^/.]+$/, ''),
-              position: { ...DEFAULT_IMAGE_POSITION },
-            });
+      async (file) => {
+        try {
+          const compressed = await compressImageFile(file, 1200, 1200, 0.8);
+          return {
+            id: `up-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            url: compressed || '',
+            title: file.name.replace(/\.[^/.]+$/, ''),
+            position: { ...DEFAULT_IMAGE_POSITION },
           };
-          reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
-          reader.readAsDataURL(file);
-        })
+        } catch {
+          return {
+            id: `up-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            url: '',
+            title: file.name.replace(/\.[^/.]+$/, ''),
+            position: { ...DEFAULT_IMAGE_POSITION },
+          };
+        }
+      }
     );
 
     Promise.all(readPromises)
@@ -304,7 +310,7 @@ export const ImagePickerField: React.FC<ImagePickerFieldProps> = ({
         </div>
 
         {/* Mode Selector Tabs */}
-        <div className="flex items-center p-0.5 rounded-xl bg-[#ECEFF3] border border-[#DFE1E6] text-xs font-extrabold w-fit">
+        <div className="flex items-center p-0.5 rounded-xl bg-[#ECEFF3] text-xs font-extrabold w-fit">
           <button
             type="button"
             id={`${id}-tab-system`}
@@ -357,7 +363,7 @@ export const ImagePickerField: React.FC<ImagePickerFieldProps> = ({
 
       {/* MULTIPLE IMAGES GROUPED TRAY: Shown when multiple is active */}
       {multiple && selectedImages && selectedImages.length > 0 && (
-        <div className="p-3 rounded-2xl bg-amber-50/50 border border-amber-200/80 space-y-2">
+        <div className="p-3 rounded-2xl bg-amber-50/50 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <Layers className="w-4 h-4 text-amber-600" />
@@ -380,38 +386,41 @@ export const ImagePickerField: React.FC<ImagePickerFieldProps> = ({
                 <div
                   key={img.id || idx}
                   onClick={() => setActiveIndex(idx)}
-                  className={`relative group shrink-0 w-20 h-16 rounded-xl overflow-hidden border-2 cursor-pointer transition select-none ${
+                  className={`relative group shrink-0 w-20 h-16 rounded-2xl cursor-pointer transition select-none ${
                     isActive
-                      ? 'border-amber-500 ring-2 ring-amber-300 shadow-xs scale-102'
-                      : 'border-[#DFE1E6] hover:border-[#808897] opacity-85 hover:opacity-100'
+                      ? 'bg-[#FFF9F0] shadow-sm'
+                      : 'opacity-85 hover:opacity-100'
                   }`}
                   title={`Click to position photo #${idx + 1}`}
                 >
-                  <img
-                    src={img.url}
-                    alt={img.title || `Photo ${idx + 1}`}
-                    style={getImageStyle(img.position)}
-                    className="w-full h-full object-cover"
-                  />
-                  <span className="absolute top-1 left-1 px-1 rounded bg-black/75 text-[9px] font-black text-white">
-                    #{idx + 1}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRemoveImage(idx);
-                    }}
-                    className="absolute top-1 right-1 w-4 h-4 rounded-full bg-black/80 hover:bg-rose-600 text-white flex items-center justify-center text-[10px] transition cursor-pointer shadow-xs"
-                    title="Remove this photo from suggestion"
-                  >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                  {isActive && (
-                    <span className="absolute bottom-0 inset-x-0 bg-amber-500 text-white text-[8px] font-black text-center uppercase tracking-wider py-0.5">
-                      Framing
+                  <div className="w-full h-full rounded-[14px] overflow-hidden relative">
+                    <img
+                      src={img.url}
+                      alt={img.title || `Photo ${idx + 1}`}
+                      style={getImageStyle(img.position)}
+                      className="w-full h-full object-cover"
+                    />
+                    <span className="absolute top-1 left-1 px-1 rounded bg-black/75 text-[9px] font-black text-white">
+                      #{idx + 1}
                     </span>
-                  )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveImage(idx);
+                      }}
+                      className="absolute top-1 right-1 w-4 h-4 rounded-full bg-black/80 hover:bg-rose-600 text-white flex items-center justify-center text-[10px] transition cursor-pointer shadow-xs"
+                      title="Remove this photo from suggestion"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                    {isActive && (
+                      <span className="absolute bottom-0 inset-x-0 bg-[#EFA00E] text-white text-[8px] font-black text-center uppercase tracking-wider py-0.5">
+                        Framing
+                      </span>
+                    )}
+                  </div>
+                  {isActive && <CornerCheckBadge size="sm" />}
                 </div>
               );
             })}
@@ -423,7 +432,7 @@ export const ImagePickerField: React.FC<ImagePickerFieldProps> = ({
                 setActiveTab('upload');
                 triggerFileInput();
               }}
-              className="shrink-0 w-20 h-16 rounded-xl border-2 border-dashed border-[#DFE1E6] hover:border-[#1A1B25] bg-white hover:bg-[#F6F8FA] flex flex-col items-center justify-center text-[#666D80] hover:text-[#1A1B25] transition cursor-pointer"
+              className="shrink-0 w-20 h-16 rounded-xl bg-[#ECEFF3] hover:bg-[#DFE1E6] flex flex-col items-center justify-center text-[#666D80] hover:text-[#1A1B25] transition cursor-pointer"
               title="Upload more photos from your device"
             >
               <Plus className="w-4 h-4 text-amber-600 mb-0.5" />
@@ -450,28 +459,26 @@ export const ImagePickerField: React.FC<ImagePickerFieldProps> = ({
                   id={`${id}-preset-${i}`}
                   onClick={() => handleSelectSystemPhoto(photo)}
                   className={`group relative ${
-                    aspectRatio === 'cover' ? 'h-18' : 'h-16'
-                  } rounded-xl overflow-hidden border-2 transition cursor-pointer select-none ${
+                    aspectRatio === 'cover' ? 'h-20' : 'h-18'
+                  } rounded-2xl transition cursor-pointer select-none ${
                     isSelected
-                      ? 'border-amber-500 ring-2 ring-amber-300'
-                      : 'border-transparent hover:opacity-90 opacity-75'
+                      ? 'shadow-md scale-[1.02]'
+                      : 'hover:opacity-90 opacity-75'
                   }`}
                 >
-                  <img
-                    src={photo.url}
-                    alt={photo.title || `System Image ${i + 1}`}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                  />
-                  {photo.title && (
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent flex items-end p-1.5 text-[10px] text-white font-bold truncate">
-                      {photo.title}
-                    </div>
-                  )}
-                  {isSelected && (
-                    <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full bg-amber-500 text-white flex items-center justify-center text-[10px] font-black shadow-xs">
-                      {multiple ? `✓ #${selectedIdx + 1}` : '✓'}
-                    </div>
-                  )}
+                  <div className="w-full h-full rounded-[14px] overflow-hidden relative">
+                    <img
+                      src={photo.url}
+                      alt={photo.title || `System Image ${i + 1}`}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    />
+                    {photo.title && (
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent flex items-end p-1.5 text-[10px] text-white font-bold truncate">
+                        {photo.title}
+                      </div>
+                    )}
+                  </div>
+                  {isSelected && <CornerCheckBadge size="sm" />}
                 </button>
               );
             })}
@@ -507,14 +514,14 @@ export const ImagePickerField: React.FC<ImagePickerFieldProps> = ({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={triggerFileInput}
-            className={`p-5 rounded-2xl border-2 border-dashed transition cursor-pointer text-center ${
+            className={`p-5 rounded-2xl transition cursor-pointer text-center ${
               isDragging
-                ? 'border-amber-500 bg-amber-50/50'
-                : 'border-[#DFE1E6] hover:border-[#1A1B25] bg-[#F8F9FB] hover:bg-[#F6F8FA]'
+                ? 'bg-amber-50/50'
+                : 'bg-[#F8F9FB] hover:bg-[#F6F8FA]'
             }`}
           >
             <div className="flex flex-col items-center justify-center">
-              <div className="w-9 h-9 rounded-full bg-white border border-[#DFE1E6] flex items-center justify-center text-amber-600 mb-2 shadow-xs">
+              <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-amber-600 mb-2 shadow-xs">
                 <UploadCloud className="w-4 h-4" />
               </div>
               <p className="text-xs font-extrabold text-[#1A1B25]">
@@ -523,14 +530,14 @@ export const ImagePickerField: React.FC<ImagePickerFieldProps> = ({
               <p className="text-[11px] text-[#666D80] mt-0.5">
                 or drag and drop multiple image files here
               </p>
-              <span className="inline-block mt-2 px-2.5 py-0.5 rounded-full bg-white border border-[#DFE1E6] text-[10px] font-bold text-[#808897]">
+              <span className="inline-block mt-2 px-2.5 py-0.5 rounded-full bg-white text-[10px] font-bold text-[#808897]">
                 Multi-file upload supported (JPG, PNG, WEBP, GIF up to 15MB)
               </span>
             </div>
           </div>
 
           {uploadedFileName && (
-            <div className="p-2.5 rounded-2xl bg-[#F8F9FB] border border-[#ECEFF3] flex items-center justify-between gap-2">
+            <div className="p-2.5 rounded-2xl bg-[#F8F9FB] flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
                   <Check className="w-4 h-4" />
@@ -559,7 +566,7 @@ export const ImagePickerField: React.FC<ImagePickerFieldProps> = ({
           )}
 
           {uploadError && (
-            <div className="flex items-center gap-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
+            <div className="flex items-center gap-1.5 p-2 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold">
               <AlertCircle className="w-3.5 h-3.5 shrink-0" />
               <span>{uploadError}</span>
             </div>
@@ -592,7 +599,7 @@ export const ImagePickerField: React.FC<ImagePickerFieldProps> = ({
                   handleAddCustomUrl();
                 }
               }}
-              className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-[#DFE1E6] text-xs text-[#1A1B25] placeholder-[#808897] focus:outline-none focus:border-[#1A1B25] bg-white transition-colors"
+              className="w-full pl-8 pr-3 py-1.5 rounded-xl outline-none text-xs text-[#1A1B25] placeholder-[#808897] bg-white transition-colors"
             />
           </div>
           {multiple && (

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   CaretDown, 
   ShareFat, 
@@ -6,13 +6,21 @@ import {
   Plus, 
   FolderSimple, 
   DeviceMobile, 
-  Check 
+  Check,
+  MagnifyingGlass,
+  Trash,
+  Crown,
+  LinkSimple,
+  Stack,
+  Users
 } from '@phosphor-icons/react';
 import { UserPersona, PlanBoard } from '../types';
+import { getAllStoredBoards } from '../utils/boardStorage';
 
 interface HeaderProps {
   currentBoard: PlanBoard;
   currentPersona: UserPersona;
+  boardPersona?: UserPersona;
   allPersonas: UserPersona[];
   allBoards?: PlanBoard[];
   onSelectBoard?: (boardId: string) => void;
@@ -21,11 +29,13 @@ interface HeaderProps {
   onOpenCreatePlan: () => void;
   onOpenShare: () => void;
   onOpenJoinFlow: () => void;
+  onDeleteBoard?: (boardId: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   currentBoard,
   currentPersona,
+  boardPersona,
   allPersonas,
   allBoards = [],
   onSelectBoard,
@@ -34,20 +44,32 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenCreatePlan,
   onOpenShare,
   onOpenJoinFlow,
+  onDeleteBoard,
 }) => {
-  const [isBoardSwitcherOpen, setIsBoardSwitcherOpen] = useState(false);
+  const [isBoardModalOpen, setIsBoardModalOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [boardFilter, setBoardFilter] = useState<'all' | 'created' | 'joined'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const boardSwitcherRef = useRef<HTMLDivElement>(null);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Click outside listener
+  // Close popup modal on Escape key
+  useEffect(() => {
+    if (!isBoardModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsBoardModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isBoardModalOpen]);
+
+  // Click outside listener for profile dropdown
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (boardSwitcherRef.current && !boardSwitcherRef.current.contains(target)) {
-        setIsBoardSwitcherOpen(false);
-      }
       if (profileDropdownRef.current && !profileDropdownRef.current.contains(target)) {
         setIsProfileMenuOpen(false);
       }
@@ -56,24 +78,154 @@ export const Header: React.FC<HeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
+  // Compute fresh unified boards list
+  const availableBoards = useMemo(() => {
+    const stored = getAllStoredBoards();
+    const map = new Map<string, PlanBoard>();
+    allBoards.forEach((b) => map.set(b.id, b));
+    stored.forEach((b) => map.set(b.id, b));
+    if (currentBoard) {
+      map.set(currentBoard.id, currentBoard);
+    }
+    return Array.from(map.values());
+  }, [allBoards, currentBoard, isBoardModalOpen]);
+
+  // Filter boards according to selected tab and search query
+  const filteredBoards = useMemo(() => {
+    return availableBoards.filter((b) => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchTitle = b.title.toLowerCase().includes(q);
+        const matchDesc = b.description?.toLowerCase().includes(q);
+        if (!matchTitle && !matchDesc) return false;
+      }
+
+      const isCreator =
+        b.ownerId === currentPersona.id ||
+        b.ownerName?.toLowerCase() === currentPersona.name.toLowerCase() ||
+        b.id === 'board-biggi-birthday' ||
+        b.ownerId === 'user-seyi';
+
+      if (boardFilter === 'created') return isCreator;
+      if (boardFilter === 'joined') return !isCreator;
+      return true;
+    });
+  }, [availableBoards, searchQuery, boardFilter, currentPersona]);
+
+  // Real Board Participants logic for this section:
+  // 1. Board Owner
+  const boardOwnerPersona = useMemo<UserPersona>(() => {
+    const ownerMember = (currentBoard.members || []).find(
+      (m) => m.role === 'owner' || m.id === currentBoard.ownerId
+    );
+    if (ownerMember) {
+      return {
+        id: ownerMember.id,
+        name: ownerMember.name,
+        avatar: ownerMember.avatar,
+        role: 'owner',
+      };
+    }
+    return {
+      id: currentBoard.ownerId || 'owner',
+      name:
+        currentBoard.creatorCustomIdentity?.displayName ||
+        currentBoard.creatorCustomName ||
+        currentBoard.ownerName ||
+        'Board Owner',
+      avatar:
+        currentBoard.creatorCustomIdentity?.avatar ||
+        currentBoard.creatorCustomAvatar ||
+        currentBoard.ownerAvatar ||
+        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      role: 'owner',
+    };
+  }, [currentBoard]);
+
+  // 2. Users who actually joined this specific board through its invite link
+  // Strictly filter out hardcoded, dummy, random, or placeholder users
+  const joinedInviteParticipants = useMemo<UserPersona[]>(() => {
+    const hardcodedDummyIds = new Set([
+      'user-tobi',
+      'user-amaka',
+      'user-kunle',
+      'user-zainab',
+      'user-femi',
+      'user-chioma',
+      'user-emeka',
+      'user-sarah',
+      'user-david',
+      'user-alex',
+      'user-jordan',
+    ]);
+
+    const result: UserPersona[] = [];
+    const seenIds = new Set<string>();
+    seenIds.add(boardOwnerPersona.id);
+
+    (currentBoard.members || []).forEach((m) => {
+      // Must not be the owner
+      if (m.id === boardOwnerPersona.id || m.role === 'owner') return;
+      // Do not show hardcoded dummy/placeholder users
+      if (hardcodedDummyIds.has(m.id)) return;
+
+      // Real users who actually joined through this board's invite link
+      const isJoinedViaInvite =
+        m.id.startsWith('user-guest') ||
+        Boolean(m.joinedViaInvite) ||
+        Boolean((m as any).isGuest);
+
+      if (isJoinedViaInvite && !seenIds.has(m.id)) {
+        seenIds.add(m.id);
+        result.push({
+          id: m.id,
+          name: m.name,
+          avatar: m.avatar,
+          role: m.role || 'member',
+          isGuest: true,
+        });
+      }
+    });
+
+    // Also include active persona if they are a joined guest on this board
+    if (
+      currentPersona &&
+      currentPersona.id !== boardOwnerPersona.id &&
+      (currentPersona.id.startsWith('user-guest') || currentPersona.isGuest) &&
+      !seenIds.has(currentPersona.id)
+    ) {
+      result.push(currentPersona);
+      seenIds.add(currentPersona.id);
+    }
+
+    return result;
+  }, [currentBoard, boardOwnerPersona, currentPersona]);
+
+  // Combined real participants on this specific board (Owner + actual joined invitees only)
+  const realBoardParticipants = useMemo<UserPersona[]>(() => {
+    return [boardOwnerPersona, ...joinedInviteParticipants];
+  }, [boardOwnerPersona, joinedInviteParticipants]);
+
   return (
     <header className="sticky top-0 z-40 bg-white px-4 sm:px-8 py-3.5 sm:py-4 transition-colors">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-        {/* LEFT: Board Switcher Pill matching reference */}
+        {/* LEFT: Board Switcher Pill */}
         <div className="relative" ref={boardSwitcherRef}>
           <button
             type="button"
             onClick={() => {
-              setIsBoardSwitcherOpen((prev) => !prev);
+              setIsBoardModalOpen(true);
               setIsProfileMenuOpen(false);
+              setSearchQuery('');
+              setBoardFilter('all');
             }}
             className="flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] transition-colors text-left cursor-pointer group select-none"
             title="Switch or manage boards"
-            aria-expanded={isBoardSwitcherOpen}
-            aria-haspopup="true"
+            aria-expanded={isBoardModalOpen}
+            aria-haspopup="dialog"
           >
             <span className="text-base sm:text-lg leading-none shrink-0" role="img" aria-label="Board emoji">
-              {currentBoard.emoji || '📋'}
+              {currentBoard.emoji || '💵'}
             </span>
 
             <span className="text-sm sm:text-[15px] font-bold text-[#1A1B25] tracking-tight truncate max-w-[150px] sm:max-w-[260px] md:max-w-[340px]">
@@ -84,89 +236,197 @@ export const Header: React.FC<HeaderProps> = ({
               weight="bold"
               size={14} 
               className={`text-[#808897] transition-transform duration-200 shrink-0 ${
-                isBoardSwitcherOpen ? 'rotate-180 text-[#1A1B25]' : 'group-hover:text-[#353849]'
+                isBoardModalOpen ? 'rotate-180 text-[#1A1B25]' : 'group-hover:text-[#353849]'
               }`} 
             />
           </button>
 
-          {/* Board Switcher Dropdown */}
-          {isBoardSwitcherOpen && (
-            <div className="absolute left-0 mt-2 w-72 sm:w-80 bg-white border border-[#ECEFF3] rounded-2xl shadow-xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-              <div className="px-3.5 py-2 border-b border-[#ECEFF3] flex items-center justify-between">
-                <span className="text-[11px] font-bold text-[#808897] uppercase tracking-wider">
-                  Switch Board
-                </span>
-                <span className="text-[10px] bg-amber-50 text-amber-800 font-bold px-2 py-0.5 rounded-full">
-                  {allBoards.length > 0 ? `${allBoards.length} Boards` : 'Active'}
-                </span>
-              </div>
+          {/* Board Switcher Modal Popup strictly matching reference image */}
+          {isBoardModalOpen && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-8 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150"
+              onClick={() => setIsBoardModalOpen(false)}
+            >
+              <div
+                className="bg-white w-full max-w-[820px] rounded-[32px] sm:rounded-[36px] p-6 sm:p-8 md:p-9 shadow-2xl relative animate-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Top Header: Title + New Board button */}
+                <div className="flex items-center justify-between gap-4 mb-6 sm:mb-7">
+                  <h2 className="text-2xl sm:text-[28px] font-extrabold text-[#1A1B25] tracking-tight font-['Nunito']">
+                    My Board
+                  </h2>
 
-              {/* Boards list */}
-              <div className="max-h-56 overflow-y-auto py-1">
-                {allBoards.length > 0 ? (
-                  allBoards.map((b) => {
-                    const isSelected = b.id === currentBoard.id;
-                    return (
-                      <button
-                        key={b.id}
-                        type="button"
-                        onClick={() => {
-                          if (onSelectBoard && !isSelected) {
-                            onSelectBoard(b.id);
-                          }
-                          setIsBoardSwitcherOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between px-3.5 py-2 text-left text-xs transition cursor-pointer hover:bg-[#F6F8FA] ${
-                          isSelected ? 'bg-amber-50/70 font-black text-[#1A1B25]' : 'text-[#353849]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="text-base shrink-0">{b.emoji || '📋'}</span>
-                          <div className="min-w-0">
-                            <p className="truncate font-bold text-[#1A1B25] text-xs">{b.title}</p>
-                            <p className="text-[10px] text-[#808897] truncate">
-                              {b.ownerName} · {b.members.length} members
-                            </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsBoardModalOpen(false);
+                      onOpenCreatePlan();
+                    }}
+                    className="flex items-center gap-1.5 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white text-sm sm:text-[15px] font-bold transition shadow-xs cursor-pointer active:scale-95 shrink-0"
+                  >
+                    <Plus size={16} weight="bold" />
+                    <span>New Board</span>
+                  </button>
+                </div>
+
+                {/* Filter Tabs Pills */}
+                <div className="flex items-center gap-2.5 sm:gap-3 mb-5 sm:mb-6 overflow-x-auto pb-1 scrollbar-none select-none">
+                  <button
+                    type="button"
+                    onClick={() => setBoardFilter('all')}
+                    className={`px-4 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-bold transition cursor-pointer shrink-0 ${
+                      boardFilter === 'all'
+                        ? 'bg-[#ECEFF3] text-[#1A1B25]'
+                        : 'bg-white border border-[#DFE1E6] text-[#666D80] hover:bg-[#F6F8FA] hover:text-[#1A1B25]'
+                    }`}
+                  >
+                    All plans
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setBoardFilter('created')}
+                    className={`px-4 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-bold transition cursor-pointer shrink-0 ${
+                      boardFilter === 'created'
+                        ? 'bg-[#ECEFF3] text-[#1A1B25]'
+                        : 'bg-white border border-[#DFE1E6] text-[#666D80] hover:bg-[#F6F8FA] hover:text-[#1A1B25]'
+                    }`}
+                  >
+                    Created by me
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setBoardFilter('joined')}
+                    className={`px-4 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-bold transition cursor-pointer shrink-0 ${
+                      boardFilter === 'joined'
+                        ? 'bg-[#ECEFF3] text-[#1A1B25]'
+                        : 'bg-white border border-[#DFE1E6] text-[#666D80] hover:bg-[#F6F8FA] hover:text-[#1A1B25]'
+                    }`}
+                  >
+                    Joined
+                  </button>
+                </div>
+
+                {/* Search Bar */}
+                <div className="relative mb-5 sm:mb-6">
+                  <MagnifyingGlass
+                    size={18}
+                    weight="bold"
+                    className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-[#A4ABB8] pointer-events-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Search board"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-[#F6F8FA] rounded-full py-3 sm:py-3.5 pl-11 sm:pl-12 pr-4 text-sm sm:text-base text-[#1A1B25] placeholder-[#A4ABB8] focus:outline-none focus:ring-2 focus:ring-[#1A1B25]/10 border-none transition"
+                  />
+                </div>
+
+                {/* Board Cards Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 overflow-y-auto max-h-[50vh] pr-1 pb-1">
+                  {filteredBoards.length > 0 ? (
+                    filteredBoards.map((b) => {
+                      const isSelected = b.id === currentBoard.id;
+                      const isCreator =
+                        b.ownerId === currentPersona.id ||
+                        b.ownerName?.toLowerCase() === currentPersona.name.toLowerCase() ||
+                        b.id === 'board-biggi-birthday' ||
+                        b.ownerId === 'user-seyi';
+                      const isJoined = !isCreator;
+                      const planItemsCount = b.plans?.length || 0;
+                      const membersCount = b.members?.length || 1;
+
+                      return (
+                        <div
+                          key={b.id}
+                          onClick={() => {
+                            if (onSelectBoard && !isSelected) {
+                              onSelectBoard(b.id);
+                            }
+                            setIsBoardModalOpen(false);
+                          }}
+                          className={`rounded-[24px] p-5 sm:p-6 bg-white transition-all cursor-pointer text-left flex flex-col justify-between select-none ${
+                            isSelected
+                              ? 'border-2 border-[#1A1B25] shadow-xs'
+                              : 'border border-[#ECEFF3] hover:border-[#DFE1E6]'
+                          }`}
+                        >
+                          <div>
+                            {/* Top row: Emoji, Title, and Delete Icon */}
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className="text-xl sm:text-2xl shrink-0 leading-none" role="img" aria-label="Emoji">
+                                  {b.emoji || '💵'}
+                                </span>
+                                <h3 className="text-base sm:text-lg font-extrabold text-[#1A1B25] tracking-tight truncate">
+                                  {b.title}
+                                </h3>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onDeleteBoard) {
+                                    onDeleteBoard(b.id);
+                                  }
+                                }}
+                                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#F0F2F5] hover:bg-[#FEE2E2] hover:text-rose-600 text-[#808897] flex items-center justify-center transition cursor-pointer shrink-0"
+                                title="Delete board"
+                              >
+                                <Trash size={16} weight="bold" />
+                              </button>
+                            </div>
+
+                            {/* Badges row */}
+                            <div className="mt-3 sm:mt-3.5 flex items-center gap-2 flex-wrap">
+                              {isSelected && (
+                                <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#E6F7F0] text-[#10B981]">
+                                  Active
+                                </span>
+                              )}
+
+                              {isCreator && (
+                                <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#F3E8FF] text-[#9333EA] flex items-center gap-1.5">
+                                  <Crown size={12} weight="fill" />
+                                  <span>Creator</span>
+                                </span>
+                              )}
+
+                              {isJoined && (
+                                <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#FEF3C7] text-[#D97706] flex items-center gap-1.5">
+                                  <LinkSimple size={13} weight="bold" />
+                                  <span>Joined</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Stats list */}
+                          <div className="mt-5 space-y-2 text-[#808897] text-sm font-semibold">
+                            <div className="flex items-center gap-2.5">
+                              <Stack size={16} weight="bold" className="text-[#A4ABB8] shrink-0" />
+                              <span>{planItemsCount} plan items</span>
+                            </div>
+                            <div className="flex items-center gap-2.5">
+                              <Users size={16} weight="bold" className="text-[#A4ABB8] shrink-0" />
+                              <span>
+                                {membersCount} {membersCount === 1 ? 'member' : 'members'}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                        {isSelected && (
-                          <Check size={16} weight="bold" className="text-amber-600 shrink-0 ml-2" />
-                        )}
-                      </button>
-                    );
-                  })
-                ) : (
-                  <div className="px-3.5 py-2 text-xs text-[#666D80]">
-                    {currentBoard.title}
-                  </div>
-                )}
-              </div>
-
-              {/* Bottom Actions inside Dropdown */}
-              <div className="border-t border-[#ECEFF3] pt-1.5 mt-1 px-1.5 space-y-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onOpenCreatePlan();
-                    setIsBoardSwitcherOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs font-bold text-[#1A1B25] hover:bg-[#ECEFF3] transition cursor-pointer"
-                >
-                  <Plus size={16} weight="bold" className="text-amber-600" />
-                  <span>Create New Plan</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    onOpenMyPlans();
-                    setIsBoardSwitcherOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs font-bold text-[#353849] hover:bg-[#F6F8FA] transition cursor-pointer"
-                >
-                  <FolderSimple size={16} weight="bold" className="text-[#666D80]" />
-                  <span>View All Saved Plans</span>
-                </button>
+                      );
+                    })
+                  ) : (
+                    <div className="col-span-full py-10 text-center text-[#808897] text-sm font-semibold">
+                      No boards found matching "{searchQuery}"
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -191,15 +451,23 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={() => {
                 setIsProfileMenuOpen((prev) => !prev);
-                setIsBoardSwitcherOpen(false);
+                setIsBoardModalOpen(false);
               }}
-              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] flex items-center justify-center text-[#1A1B25] transition-colors cursor-pointer active:scale-95 select-none"
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] flex items-center justify-center text-[#1A1B25] transition-colors cursor-pointer active:scale-95 select-none overflow-hidden ring-2 ring-transparent hover:ring-amber-300"
               title="Profile & user switcher"
               aria-label="User profile and account switcher"
               aria-expanded={isProfileMenuOpen}
               aria-haspopup="true"
             >
-              <User size={21} weight="regular" className="text-[#1A1B25]" />
+              {(boardPersona?.avatar || currentPersona.avatar) ? (
+                <img 
+                  src={boardPersona?.avatar || currentPersona.avatar} 
+                  alt={boardPersona?.name || currentPersona.name} 
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <User size={21} weight="regular" className="text-[#1A1B25]" />
+              )}
             </button>
 
             {/* Profile Menu Dropdown */}
@@ -208,50 +476,81 @@ export const Header: React.FC<HeaderProps> = ({
                 {/* Active user header */}
                 <div className="px-3.5 py-2.5 border-b border-[#ECEFF3] flex items-center gap-3">
                   <img 
-                    src={currentPersona.avatar} 
-                    alt={currentPersona.name} 
-                    className="w-10 h-10 rounded-full object-cover ring-2 ring-amber-400"
+                    src={boardPersona?.avatar || currentPersona.avatar} 
+                    alt={boardPersona?.name || currentPersona.name} 
+                    className="w-10 h-10 rounded-full object-cover ring-2 ring-amber-400 shrink-0"
                   />
                   <div className="min-w-0">
-                    <div className="font-extrabold text-sm text-[#1A1B25] truncate">
-                      {currentPersona.name}
+                    <div className="font-extrabold text-sm text-[#1A1B25] truncate flex items-center gap-1.5">
+                      <span>{boardPersona?.name || currentPersona.name}</span>
+                      {boardPersona?.name && boardPersona.name !== currentPersona.name && (
+                        <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded-md">
+                          Board Name
+                        </span>
+                      )}
                     </div>
-                    <div className="text-[11px] text-[#666D80] flex items-center gap-1.5">
-                      <span className="capitalize font-semibold">{currentPersona.role}</span>
-                      {currentPersona.email && <span>· {currentPersona.email}</span>}
+                    <div className="text-[11px] text-[#666D80] flex items-center gap-1.5 truncate">
+                      <span className="capitalize font-semibold">{boardPersona?.role || currentPersona.role}</span>
+                      <span>· {boardOwnerPersona.id === currentPersona.id ? 'Board Owner' : 'Joined Member'}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Persona Switcher for Testing */}
-                <div className="px-3.5 pt-2 pb-1 text-[10px] font-bold text-[#808897] uppercase tracking-wider">
-                  Switch Persona (Role Testing)
+                {/* Real Board Participants (Owner & Actual Joined Invitees Only) */}
+                <div className="px-3.5 pt-2 pb-1 flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-[#808897] uppercase tracking-wider">
+                    Board Participants ({realBoardParticipants.length})
+                  </span>
                 </div>
-                <div className="py-1">
-                  {allPersonas.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => {
-                        onSelectPersona(p);
-                        setIsProfileMenuOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-3.5 py-2 text-left text-xs hover:bg-[#F6F8FA] transition cursor-pointer ${
-                        currentPersona.id === p.id ? 'bg-amber-50 font-bold text-[#1A1B25]' : 'text-[#353849]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <img src={p.avatar} alt={p.name} className="w-6 h-6 rounded-full object-cover" />
-                        <div>
-                          <div className="font-semibold text-xs leading-tight">{p.name}</div>
-                          <div className="text-[10px] text-[#808897] capitalize">{p.role}</div>
+                <div className="py-1 max-h-56 overflow-y-auto">
+                  {realBoardParticipants.map((p) => {
+                    const isOwner = p.id === boardOwnerPersona.id || p.role === 'owner';
+                    const isCurrent = currentPersona.id === p.id;
+
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          onSelectPersona(p);
+                          setIsProfileMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3.5 py-2 text-left text-xs hover:bg-[#F6F8FA] transition cursor-pointer ${
+                          isCurrent ? 'bg-amber-50 font-bold text-[#1A1B25]' : 'text-[#353849]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <img 
+                            src={p.avatar} 
+                            alt={p.name} 
+                            className={`w-6 h-6 rounded-full object-cover shrink-0 ${
+                              isOwner ? 'ring-1.5 ring-amber-500' : ''
+                            }`} 
+                          />
+                          <div className="min-w-0 truncate">
+                            <div className="font-semibold text-xs leading-tight truncate flex items-center gap-1.5">
+                              <span>{p.name}</span>
+                              {isOwner && (
+                                <Crown size={12} weight="fill" className="text-amber-500 shrink-0" />
+                              )}
+                            </div>
+                            <div className="text-[10px] text-[#808897] capitalize">
+                              {isOwner ? 'Board Owner' : 'Joined via Invite'}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      {currentPersona.id === p.id && (
-                        <Check size={16} weight="bold" className="text-amber-600" />
-                      )}
-                    </button>
-                  ))}
+                        {isCurrent && (
+                          <Check size={16} weight="bold" className="text-amber-600 shrink-0 ml-2" />
+                        )}
+                      </button>
+                    );
+                  })}
+
+                  {joinedInviteParticipants.length === 0 && (
+                    <div className="px-3.5 py-2 text-[11px] text-[#808897] bg-[#F8F9FB] mx-2 my-1 rounded-xl">
+                      No guests have joined yet. Share the invite link below to invite friends!
+                    </div>
+                  )}
                 </div>
 
                 {/* Extra Utility Actions moved here */}

@@ -1,14 +1,9 @@
 import React, { useState } from 'react';
 import { 
-  CheckCircle2, 
-  Clock, 
-  UserCheck, 
+  Check, 
   CreditCard, 
-  Plus, 
-  Sparkles, 
-  HandMetal, 
-  ShieldCheck,
-  Award
+  Search,
+  CheckCircle2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { TaskItem, ContributionItem, UserPersona, BoardMember } from '../types';
@@ -32,191 +27,225 @@ export const ContributionsSection: React.FC<ContributionsSectionProps> = ({
   onToggleTaskComplete,
   onVolunteerForTask,
   onTogglePaymentPaid,
-  onOpenCreateItem,
 }) => {
   const [activeTab, setActiveTab] = useState<'tasks' | 'money'>('tasks');
+  const [searchQuery, setSearchQuery] = useState('');
   const contribution = contributions[0];
   const isPaid = contribution?.contributorsPaid.includes(currentPersona.id);
 
   const getMember = (id?: string) => allMembers.find((m) => m.id === id);
 
+  const filteredTasks = tasks.filter((task) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    const assignee = getMember(task.assigneeId);
+    return (
+      task.title.toLowerCase().includes(q) ||
+      task.category.toLowerCase().includes(q) ||
+      (assignee && assignee.name.toLowerCase().includes(q))
+    );
+  });
+
   return (
-    <section id="responsibilities-section" className="mb-8 scroll-mt-20">
+    <section id="responsibilities-section" className="scroll-mt-20">
+      {/* Section Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
-          <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-blue-600">
-            <Award className="w-3.5 h-3.5" />
-            <span>Accountability & Contributions</span>
-          </div>
           <h2 className="text-xl sm:text-2xl font-black text-[#1A1B25]">
             Responsibilities & Money Pool
           </h2>
-          <p className="text-xs text-[#666D80]">
+          <p className="text-xs sm:text-sm text-[#808897] mt-0.5">
             Who is handling what · Progress and shared costs
           </p>
         </div>
 
-        {/* Tab switch */}
-        <div className="flex items-center gap-1.5 bg-[#ECEFF3] p-1 rounded-2xl self-start sm:self-auto">
+        {/* Tab switch pills matching design system */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none self-start sm:self-auto">
           <button
+            type="button"
             onClick={() => setActiveTab('tasks')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-              activeTab === 'tasks' ? 'bg-white text-[#1A1B25] shadow-xs' : 'text-[#666D80] hover:text-[#1A1B25]'
+            className={`px-5 py-2 rounded-full text-xs transition cursor-pointer whitespace-nowrap ${
+              activeTab === 'tasks'
+                ? 'bg-[#ECEFF3] text-[#1A1B25] font-bold border border-transparent'
+                : 'bg-white border border-[#DFE1E6] text-[#666D80] font-semibold hover:bg-[#F6F8FA]'
             }`}
           >
             Tasks & Volunteers ({tasks.length})
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('money')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'money' ? 'bg-white text-[#1A1B25] shadow-xs' : 'text-[#666D80] hover:text-[#1A1B25]'
+            className={`px-5 py-2 rounded-full text-xs transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              activeTab === 'money'
+                ? 'bg-[#ECEFF3] text-[#1A1B25] font-bold border border-transparent'
+                : 'bg-white border border-[#DFE1E6] text-[#666D80] font-semibold hover:bg-[#F6F8FA]'
             }`}
           >
-            <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+            <CreditCard className="w-3.5 h-3.5 text-[#666D80]" />
             <span>Money Pool</span>
           </button>
         </div>
       </div>
 
       {activeTab === 'tasks' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {tasks.map((task) => {
-            const isCompleted = task.status === 'completed';
-            const isAssignedToCurrent = task.assigneeId === currentPersona.id;
-            const assignee = getMember(task.assigneeId);
-            const isOpenToVolunteer = !task.assigneeId;
+        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#F6F8FA] shadow-[3px_4px_20px_0px_#ECEFF3]">
+          {/* Search bar */}
+          <div className="relative mb-4">
+            <Search className="w-4 h-4 text-[#808897] absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search tasks or assignees"
+              className="w-full pl-11 pr-4 py-2.5 rounded-full bg-white border border-[#DFE1E6] text-xs sm:text-sm text-[#1A1B25] placeholder-[#808897] focus:outline-none focus:border-[#808897] transition"
+            />
+          </div>
 
-            return (
-              <div
-                key={task.id}
-                className={`rounded-2xl p-4 border transition shadow-xs flex flex-col justify-between ${
-                  isCompleted
-                    ? 'bg-emerald-50/40 border-emerald-200'
-                    : isOpenToVolunteer
-                    ? 'bg-amber-50/30 border-dashed border-amber-300'
-                    : 'bg-white border-[#ECEFF3] hover:border-blue-200'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-1 mb-2">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-[#808897]">
-                      {task.category}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                      isCompleted 
-                        ? 'bg-emerald-100 text-emerald-800' 
-                        : isOpenToVolunteer 
-                        ? 'bg-amber-100 text-amber-900' 
-                        : 'bg-blue-50 text-blue-700'
-                    }`}>
-                      {isCompleted ? 'Completed ✓' : isOpenToVolunteer ? 'Needs Volunteer' : 'In Progress'}
-                    </span>
-                  </div>
+          {/* Tasks List */}
+          <div className="divide-y divide-[#ECEFF3]">
+            {filteredTasks.map((task) => {
+              const isCompleted = task.status === 'completed';
+              const isAssignedToCurrent = task.assigneeId === currentPersona.id;
+              const assignee = getMember(task.assigneeId);
+              const isOpenToVolunteer = !task.assigneeId;
 
-                  <h3 className={`text-sm font-extrabold text-[#1A1B25] mb-1 ${isCompleted ? 'line-through text-[#666D80]' : ''}`}>
-                    {task.title}
-                  </h3>
-
-                  {task.description && (
-                    <p className="text-xs text-[#666D80] mb-3 leading-relaxed">
-                      {task.description}
-                    </p>
-                  )}
-                </div>
-
-                {/* Bottom Assignee & Action */}
-                <div className="pt-3 border-t border-[#ECEFF3] flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    {assignee ? (
-                      <>
-                        <img
-                          src={assignee.avatar}
-                          alt={assignee.name}
-                          className="w-6 h-6 rounded-full object-cover border border-white shadow-2xs"
-                        />
-                        <div className="min-w-0">
-                          <div className="text-xs font-black text-[#1A1B25] truncate">
-                            {assignee.name} {isAssignedToCurrent && '(You)'}
-                          </div>
-                          <div className="text-[10px] text-[#808897] font-semibold">
-                            Responsible
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <span className="text-xs font-bold text-amber-700">
-                        Unclaimed
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  {isOpenToVolunteer ? (
+              return (
+                <div
+                  key={task.id}
+                  className="py-3.5 flex items-center justify-between gap-3"
+                >
+                  {/* Left: Check status + Info */}
+                  <div className="flex items-center gap-3 min-w-0">
                     <button
-                      onClick={() => {
-                        onVolunteerForTask(task.id);
-                        confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1"
-                    >
-                      <HandMetal className="w-3.5 h-3.5" />
-                      <span>I'll Handle This</span>
-                    </button>
-                  ) : (
-                    <button
+                      type="button"
                       onClick={() => {
                         onToggleTaskComplete(task.id);
                         if (!isCompleted) {
-                          confetti({ particleCount: 40, spread: 60, origin: { y: 0.8 } });
+                          confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
                         }
                       }}
-                      className={`px-2.5 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+                      className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition cursor-pointer ${
                         isCompleted
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'bg-white border border-[#DFE1E6] hover:bg-emerald-50 text-[#353849]'
+                          ? 'bg-[#1A1B25] border-[#1A1B25] text-white'
+                          : 'border-[#C1C7CF] hover:border-[#808897] bg-white'
                       }`}
                     >
-                      {isCompleted ? 'Done ✓' : 'Mark Done'}
+                      {isCompleted && <Check className="w-3 h-3 stroke-[3]" />}
                     </button>
-                  )}
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-bold truncate ${
+                          isCompleted ? 'line-through text-[#808897]' : 'text-[#1A1B25]'
+                        }`}>
+                          {task.title}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#F8F9FB] border border-[#ECEFF3] text-[#666D80] shrink-0">
+                          {task.category}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-xs text-[#808897] mt-0.5">
+                        {assignee ? (
+                          <div className="flex items-center gap-1.5">
+                            <img
+                              src={assignee.avatar}
+                              alt={assignee.name}
+                              className="w-4 h-4 rounded-full object-cover"
+                            />
+                            <span>
+                              {assignee.name} {isAssignedToCurrent && '(You)'}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-amber-700 font-semibold">
+                            Needs volunteer
+                          </span>
+                        )}
+                        {task.description && (
+                          <span className="hidden sm:inline text-[#808897] truncate">
+                            · {task.description}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Action Button */}
+                  <div className="shrink-0">
+                    {isOpenToVolunteer ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onVolunteerForTask(task.id);
+                          confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-amber-300 text-amber-800 bg-white hover:bg-amber-50 text-xs font-bold transition cursor-pointer shadow-2xs"
+                      >
+                        <span>Volunteer</span>
+                      </button>
+                    ) : isCompleted ? (
+                      <button
+                        type="button"
+                        onClick={() => onToggleTaskComplete(task.id)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-emerald-300 text-emerald-800 bg-white hover:bg-emerald-50 text-xs font-bold transition cursor-pointer shadow-2xs"
+                      >
+                        <span>Done ✓</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onToggleTaskComplete(task.id);
+                          confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-[#DFE1E6] text-[#1A1B25] bg-white hover:bg-[#F8F9FB] text-xs font-bold transition cursor-pointer shadow-2xs"
+                      >
+                        <span>Mark Done</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
+              );
+            })}
+
+            {filteredTasks.length === 0 && (
+              <div className="py-8 text-center text-xs text-[#808897]">
+                No tasks matching "{searchQuery}"
               </div>
-            );
-          })}
+            )}
+          </div>
         </div>
       ) : (
         /* Money Contribution View */
         contribution && (
-          <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#ECEFF3] shadow-xs">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#F6F8FA] shadow-[3px_4px_20px_0px_#ECEFF3] space-y-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#ECEFF3]">
               <div>
-                <span className="text-xs font-black uppercase tracking-wider text-[#808897]">
-                  Pooled Group Expenses
-                </span>
-                <h3 className="text-xl sm:text-2xl font-black text-[#1A1B25]">
+                <h3 className="text-base sm:text-lg font-bold text-[#1A1B25]">
                   {contribution.title}
                 </h3>
-                <p className="text-xs text-[#666D80] mt-0.5">
-                  ₦8,500 per person · Covers Landmark cabana pass, grilled lunch & bus fuel
+                <p className="text-xs text-[#808897] mt-0.5">
+                  ₦8,500 per person · Covers cabana pass, grilled lunch & transport
                 </p>
               </div>
 
               {/* Amount stats */}
-              <div className="bg-[#F8F9FB] px-4 py-3 rounded-2xl border border-[#ECEFF3] text-right sm:text-right">
-                <div className="text-xs font-bold text-[#808897]">Total Collected</div>
-                <div className="text-xl font-black text-[#1A1B25]">
+              <div className="bg-[#F8F9FB] px-4 py-2.5 rounded-2xl border border-[#ECEFF3] text-right">
+                <div className="text-xs font-semibold text-[#808897]">Total Collected</div>
+                <div className="text-lg font-black text-[#1A1B25]">
                   ₦{contribution.currentAmount?.toLocaleString()} / ₦{contribution.targetAmount?.toLocaleString()}
                 </div>
-                <div className="text-xs font-extrabold text-emerald-700">
-                  {contribution.contributorsPaid.length}/{contribution.totalContributorsNeeded} people paid (75%)
+                <div className="text-[11px] font-bold text-[#059669]">
+                  {contribution.contributorsPaid.length}/{contribution.totalContributorsNeeded} people paid
                 </div>
               </div>
             </div>
 
-            {/* Big progress bar */}
-            <div className="w-full h-3 bg-[#ECEFF3] rounded-full overflow-hidden mb-6">
+            {/* Progress bar */}
+            <div className="w-full h-2 bg-[#ECEFF3] rounded-full overflow-hidden">
               <div
-                className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                className="bg-[#1A1B25] h-full rounded-full transition-all duration-500"
                 style={{
                   width: `${((contribution.currentAmount || 0) / (contribution.targetAmount || 1)) * 100}%`,
                 }}
@@ -224,11 +253,11 @@ export const ContributionsSection: React.FC<ContributionsSectionProps> = ({
             </div>
 
             {/* Roster of who paid vs remaining */}
-            <div className="mb-6">
-              <h4 className="text-xs font-black uppercase tracking-wider text-[#353849] mb-3">
+            <div>
+              <div className="text-xs font-bold text-[#666D80] uppercase tracking-wider mb-3">
                 Participant Payment Roster
-              </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+              </div>
+              <div className="divide-y divide-[#ECEFF3]">
                 {allMembers.map((member) => {
                   const hasMemberPaid = contribution.contributorsPaid.includes(member.id);
                   const isCurrent = member.id === currentPersona.id;
@@ -236,33 +265,36 @@ export const ContributionsSection: React.FC<ContributionsSectionProps> = ({
                   return (
                     <div
                       key={member.id}
-                      className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs transition ${
-                        hasMemberPaid
-                          ? 'bg-emerald-50/50 border-emerald-200 text-[#1A1B25]'
-                          : 'bg-[#F8F9FB] border-[#ECEFF3] text-[#808897]'
-                      }`}
+                      className="py-3 flex items-center justify-between gap-3 text-xs"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0">
                         <img
                           src={member.avatar}
                           alt={member.name}
-                          className="w-6 h-6 rounded-full object-cover border border-white"
+                          className="w-8 h-8 rounded-full object-cover shrink-0"
                         />
-                        <span className="font-bold truncate">
-                          {member.name} {isCurrent && '(You)'}
-                        </span>
+                        <div className="min-w-0">
+                          <span className="font-bold text-[#1A1B25] truncate block">
+                            {member.name} {isCurrent && '(You)'}
+                          </span>
+                          <span className="text-[11px] text-[#808897]">
+                            ₦8,500 allocated
+                          </span>
+                        </div>
                       </div>
 
-                      {hasMemberPaid ? (
-                        <span className="text-[11px] font-black text-emerald-700 flex items-center gap-0.5">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          Paid
-                        </span>
-                      ) : (
-                        <span className="text-[11px] font-bold text-amber-700">
-                          Pending
-                        </span>
-                      )}
+                      <div>
+                        {hasMemberPaid ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full border border-[#A7F3D0] text-[#059669] bg-white text-xs font-bold">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Paid</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full border border-[#DFE1E6] text-[#808897] bg-white text-xs font-semibold">
+                            <span>Pending</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -271,23 +303,24 @@ export const ContributionsSection: React.FC<ContributionsSectionProps> = ({
 
             {/* User action bar */}
             <div className="pt-4 border-t border-[#ECEFF3] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="text-xs text-[#666D80] font-semibold">
-                Your share is <strong className="text-[#1A1B25]">₦8,500</strong>. Transfer to Seyi's pool or mark as settled.
+              <div className="text-xs text-[#666D80] font-medium">
+                Your share is <strong className="text-[#1A1B25]">₦8,500</strong>. Transfer to pool or mark settled.
               </div>
 
               <button
+                type="button"
                 onClick={() => {
                   onTogglePaymentPaid(contribution.id);
                   confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 } });
                 }}
-                className={`px-4 py-2.5 rounded-xl text-xs font-black transition cursor-pointer shadow-xs active:scale-95 flex items-center justify-center gap-1.5 ${
+                className={`px-5 py-2 rounded-full text-xs font-bold transition cursor-pointer shadow-xs active:scale-95 flex items-center justify-center gap-1.5 ${
                   isPaid
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    ? 'bg-white border border-[#A7F3D0] text-[#059669]'
+                    : 'bg-[#1A1B25] hover:bg-[#272835] text-white'
                 }`}
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>{isPaid ? "You're marked as Paid ✓ (Undo)" : "I've Sent My ₦8,500"}</span>
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{isPaid ? "Marked as Paid ✓ (Undo)" : "I've Sent My ₦8,500"}</span>
               </button>
             </div>
           </div>
@@ -296,3 +329,4 @@ export const ContributionsSection: React.FC<ContributionsSectionProps> = ({
     </section>
   );
 };
+

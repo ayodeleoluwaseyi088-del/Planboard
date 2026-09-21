@@ -354,7 +354,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   };
 
   return (
-    <div id={id} className="space-y-3 bg-[#F8F9FB] p-3.5 sm:p-4 rounded-2xl border border-[#ECEFF3]">
+    <div id={id} className="space-y-3 bg-[#F8F9FB] p-3.5 sm:p-4 rounded-2xl">
       {/* Mode Switcher Tabs */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center bg-[#ECEFF3] p-0.5 rounded-xl text-xs font-black">
@@ -416,35 +416,35 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         <button
           type="button"
           onClick={() => handleApplyPreset('in2hours')}
-          className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#ECEFF3] border border-[#DFE1E6] text-[11px] font-extrabold text-[#272835] transition shrink-0 cursor-pointer active:scale-95"
+          className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#ECEFF3] text-[11px] font-extrabold text-[#272835] transition shrink-0 cursor-pointer active:scale-95"
         >
           ⚡ in 2 hours
         </button>
         <button
           type="button"
           onClick={() => handleApplyPreset('today7pm')}
-          className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#ECEFF3] border border-[#DFE1E6] text-[11px] font-extrabold text-[#272835] transition shrink-0 cursor-pointer active:scale-95"
+          className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#ECEFF3] text-[11px] font-extrabold text-[#272835] transition shrink-0 cursor-pointer active:scale-95"
         >
           Today 7:00 PM
         </button>
         <button
           type="button"
           onClick={() => handleApplyPreset('tomorrow')}
-          className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#ECEFF3] border border-[#DFE1E6] text-[11px] font-extrabold text-[#272835] transition shrink-0 cursor-pointer active:scale-95"
+          className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#ECEFF3] text-[11px] font-extrabold text-[#272835] transition shrink-0 cursor-pointer active:scale-95"
         >
           Tomorrow 2:00 PM
         </button>
         <button
           type="button"
           onClick={() => handleApplyPreset('thisSaturday')}
-          className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#ECEFF3] border border-[#DFE1E6] text-[11px] font-extrabold text-[#272835] transition shrink-0 cursor-pointer active:scale-95"
+          className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#ECEFF3] text-[11px] font-extrabold text-[#272835] transition shrink-0 cursor-pointer active:scale-95"
         >
           Saturday
         </button>
         <button
           type="button"
           onClick={() => handleApplyPreset('in3days')}
-          className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#ECEFF3] border border-[#DFE1E6] text-[11px] font-extrabold text-[#272835] transition shrink-0 cursor-pointer active:scale-95"
+          className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#ECEFF3] text-[11px] font-extrabold text-[#272835] transition shrink-0 cursor-pointer active:scale-95"
         >
           in 3 days
         </button>
@@ -458,7 +458,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
             placeholder="Type date/time naturally: e.g. in 2 hours, tomorrow at 7pm, August 20, 2026..."
             value={naturalInput}
             onChange={(e) => handleNaturalInputChange(e.target.value)}
-            className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white font-medium text-[#1A1B25] focus:outline-amber-500 shadow-2xs"
+            className="w-full pl-8 pr-3 py-2 text-xs rounded-xl bg-white font-medium text-[#1A1B25] outline-none shadow-2xs"
           />
           <Sparkles className="w-3.5 h-3.5 text-amber-600 absolute left-2.5 top-3 pointer-events-none" />
         </div>
@@ -467,7 +467,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         {interpretationFeedback && (
           <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
             {interpretationFeedback.recognized ? (
-              <span className="flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200/60">
+              <span className="flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg">
                 <Check className="w-3 h-3 stroke-[2.5]" />
                 <span>Recognized: {interpretationFeedback.label}</span>
               </span>
@@ -485,7 +485,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-1">
         {/* Calendar Picker (shown in datetime and date modes) */}
         {mode !== 'time' && (
-          <div className={`${mode === 'date' ? 'md:col-span-12' : 'md:col-span-7'} bg-white p-3 rounded-2xl border border-[#ECEFF3] shadow-2xs`}>
+          <div className={`${mode === 'date' ? 'md:col-span-12' : 'md:col-span-7'} bg-white p-3 rounded-2xl shadow-2xs`}>
             {/* Month Header Navigation */}
             <div className="flex items-center justify-between mb-2 px-1">
               <span className="text-xs font-black text-[#1A1B25]">
@@ -552,7 +552,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
 
         {/* Time Picker (shown in datetime and time modes) */}
         {mode !== 'date' && (
-          <div className={`${mode === 'time' ? 'md:col-span-12' : 'md:col-span-5'} bg-white p-3 rounded-2xl border border-[#ECEFF3] shadow-2xs space-y-3 flex flex-col justify-between`}>
+          <div className={`${mode === 'time' ? 'md:col-span-12' : 'md:col-span-5'} bg-white p-3 rounded-2xl shadow-2xs space-y-3 flex flex-col justify-between`}>
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-black text-[#1A1B25] flex items-center gap-1">
@@ -630,7 +630,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
             </div>
 
             {/* Current Chosen Time Display */}
-            <div className="p-2 rounded-xl bg-[#F8F9FB] border border-[#ECEFF3] flex items-center justify-between text-xs">
+            <div className="p-2 rounded-xl bg-[#F8F9FB] flex items-center justify-between text-xs">
               <span className="text-[#808897] font-bold">Selected:</span>
               <span className="font-black text-[#1A1B25]">
                 {String(selectedHour12).padStart(2, '0')}:{String(selectedMinute).padStart(2, '0')} {selectedAmPm}
@@ -641,7 +641,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
       </div>
 
       {/* Machine-Readable Value & Real-Time Countdown Preview Banner */}
-      <div className="p-3 bg-white rounded-2xl border border-[#ECEFF3] shadow-2xs space-y-1.5">
+      <div className="p-3 bg-white rounded-2xl shadow-2xs space-y-1.5">
         <div className="flex items-center justify-between flex-wrap gap-2">
           {/* Formatted Human Display */}
           <div className="flex items-center gap-2">

@@ -12,6 +12,11 @@ export function isPlanMatchingItem(
 ): boolean {
   if (!plan || !item) return false;
 
+  // 0. Explicit appliedSuggestionId link
+  if (plan.appliedSuggestionId && (plan.appliedSuggestionId === item.id || (item as any).suggestionId === plan.appliedSuggestionId)) {
+    return true;
+  }
+
   // 1. Explicit planId link (e.g. suggestions always have planId)
   if (item.planId && item.planId === plan.id) {
     return true;
@@ -100,18 +105,31 @@ export function getPlanCurrentTruth(
 ): PlanCurrentTruth {
   let truth: PlanCurrentTruth;
 
-  // Check if there is an active winning visual suggestion applied to this plan
-  const winningSug = linkedSuggestions?.find(s => s.isSelectedWinner);
-  if (winningSug && (plan.deciderType === 'photo_idea' || plan.appliedSuggestionId === winningSug.id || plan.isSelectedWinner)) {
+  // Check if there is an active winning suggestion applied to this plan (either manual selection override or vote conclusion)
+  const winningSug = linkedSuggestions?.find(s => s.isSelectedWinner || s.id === plan.appliedSuggestionId);
+  const isSuggestionApplied = Boolean(
+    winningSug ||
+    plan.appliedSuggestionId ||
+    (plan.isSelectedWinner && plan.currentSelection) ||
+    (plan.decidedSource === 'suggestion' && plan.currentSelection)
+  );
+
+  if (isSuggestionApplied) {
+    const selectedTitle = winningSug?.title || plan.currentSelection || plan.title;
+    const selectedImage = winningSug?.imageUrl || plan.imageUrl;
+    const selectedPosition = winningSug?.imagePosition || plan.imagePosition;
+    const selectedImages = winningSug?.images || plan.images;
+
     truth = {
-      value: winningSug.title,
+      value: selectedTitle,
       isDecided: true,
       statusLabel: 'Current Selection ✓',
       sourceType: 'suggestion',
-      subtext: 'Selected from visual ideas',
-      imageUrl: winningSug.imageUrl || plan.imageUrl,
-      imagePosition: winningSug.imagePosition || plan.imagePosition,
-      images: winningSug.images || plan.images,
+      subtext: winningSug ? `Selected: ${winningSug.title}` : 'Selected choice',
+      imageUrl: selectedImage,
+      imagePosition: selectedPosition,
+      images: selectedImages,
+      winningOptionId: linkedDecision?.options?.find(o => o.label.toLowerCase() === selectedTitle.toLowerCase())?.id,
     };
   } else if (plan.deciderType === 'voting') {
     // 1. Voting decider
@@ -128,19 +146,25 @@ export function getPlanCurrentTruth(
         statusLabel: 'Decided ✓',
         sourceType: 'voting',
         subtext: 'Final choice confirmed',
+        imageUrl: plan.imageUrl,
+        imagePosition: plan.imagePosition,
+        images: plan.images,
         winningOptionId: linkedDecision?.options?.find(o => rawVal.includes(o.label))?.id,
       };
     } else {
       // Voting is ACTIVE / REOPENED / PENDING
       const activeOptions = linkedDecision?.options || plan.options || [];
       const leader = getLeadingOption(activeOptions);
-      const fallbackVal = plan.initialSelection || plan.description || 'Vote in progress';
-      const leaderVal = leader && leader.voteCount > 0 ? leader.label : fallbackVal;
+      const fallbackVal = plan.initialSelection || plan.previousSelection || plan.description || 'Vote in progress';
+      const roundNum = plan.decisionRound || linkedDecision?.decisionRound || 1;
+      const roundLabel = (plan.isReopened || linkedDecision?.isReopened || roundNum > 1)
+        ? `Round ${roundNum > 1 ? roundNum : 2} Active`
+        : 'Voting Active';
 
       truth = {
-        value: leaderVal,
+        value: fallbackVal,
         isDecided: false,
-        statusLabel: 'Voting Active',
+        statusLabel: roundLabel,
         sourceType: 'voting',
         leadDetail: leader && leader.voteCount > 0 ? `${leader.voteCount} ${leader.voteCount === 1 ? 'vote' : 'votes'} (in the lead)` : undefined,
         subtext: leader && leader.voteCount > 0 ? `Leading choice (${leader.voteCount} votes)` : 'Open for votes',

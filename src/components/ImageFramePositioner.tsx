@@ -218,11 +218,11 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
               nudge(step, 0);
             }
           }}
-          className={`relative ${getAspectRatioClasses()} rounded-2xl overflow-hidden bg-[#1A1B25] border border-[#ECEFF3] shadow-xs select-none transition-shadow ${
+          className={`relative ${getAspectRatioClasses()} rounded-2xl overflow-hidden bg-[#1A1B25] shadow-xs select-none transition-shadow ${
             !readOnly
               ? isDragging
-                ? 'cursor-grabbing ring-2 ring-[#1A1B25] shadow-md'
-                : 'cursor-grab hover:ring-2 hover:ring-amber-500/50'
+                ? 'cursor-grabbing shadow-md'
+                : 'cursor-grab'
               : ''
           }`}
         >
@@ -258,7 +258,7 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold shadow-sm backdrop-blur-md transition-all ${
                   isDragging
                     ? 'bg-[#1A1B25]/90 text-white scale-95'
-                    : 'bg-white/90 text-[#1A1B25] border border-white/40'
+                    : 'bg-white/90 text-[#1A1B25]'
                 }`}
               >
                 <Move className={`w-3 h-3 ${isDragging ? 'text-amber-400 animate-spin' : 'text-[#666D80]'}`} />
@@ -289,7 +289,7 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
 
       {/* Reposition Controls Bar */}
       {!readOnly && showControls && (
-        <div className="p-3 rounded-2xl bg-[#F8F9FB] border border-[#ECEFF3] space-y-2.5">
+        <div className="p-3 rounded-2xl bg-[#F8F9FB] space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             {/* Quick Preset Alignments */}
             <div className="flex items-center gap-1">
@@ -298,7 +298,7 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
                 type="button"
                 onClick={() => applyPreset(50, 15)}
                 className={`px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  internalPos.y < 30 ? 'bg-[#1A1B25] text-white shadow-xs' : 'bg-white text-[#353849] hover:bg-[#ECEFF3] border border-[#DFE1E6]'
+                  internalPos.y < 30 ? 'bg-[#1A1B25] text-white shadow-xs' : 'bg-white text-[#353849] hover:bg-[#ECEFF3]'
                 }`}
                 title="Focus Top (faces / horizon)"
               >
@@ -308,7 +308,7 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
                 type="button"
                 onClick={() => applyPreset(50, 50)}
                 className={`px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  internalPos.x === 50 && internalPos.y === 50 ? 'bg-[#1A1B25] text-white shadow-xs' : 'bg-white text-[#353849] hover:bg-[#ECEFF3] border border-[#DFE1E6]'
+                  internalPos.x === 50 && internalPos.y === 50 ? 'bg-[#1A1B25] text-white shadow-xs' : 'bg-white text-[#353849] hover:bg-[#ECEFF3]'
                 }`}
                 title="Center composition"
               >
@@ -318,7 +318,7 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
                 type="button"
                 onClick={() => applyPreset(50, 85)}
                 className={`px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  internalPos.y > 70 ? 'bg-[#1A1B25] text-white shadow-xs' : 'bg-white text-[#353849] hover:bg-[#ECEFF3] border border-[#DFE1E6]'
+                  internalPos.y > 70 ? 'bg-[#1A1B25] text-white shadow-xs' : 'bg-white text-[#353849] hover:bg-[#ECEFF3]'
                 }`}
                 title="Focus Bottom"
               >
@@ -333,8 +333,8 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
                 onClick={() => setShowGrid((prev) => !prev)}
                 className={`p-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
                   showGrid
-                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                    : 'bg-white text-[#666D80] hover:text-[#1A1B25] border border-[#DFE1E6]'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-white text-[#666D80] hover:text-[#1A1B25]'
                 }`}
                 title="Toggle composition grid"
               >
@@ -345,10 +345,10 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
               <button
                 type="button"
                 onClick={() => setShowFineTune((prev) => !prev)}
-                className={`px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${
+                className={`px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                   showFineTune
-                    ? 'bg-[#1A1B25] text-white border-[#1A1B25]'
-                    : 'bg-white text-[#666D80] hover:text-[#1A1B25] border-[#DFE1E6]'
+                    ? 'bg-[#1A1B25] text-white'
+                    : 'bg-white text-[#666D80] hover:text-[#1A1B25]'
                 }`}
               >
                 Fine Tune
@@ -357,7 +357,7 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
               <button
                 type="button"
                 onClick={handleReset}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-[#DFE1E6] hover:bg-[#F6F8FA] text-xs font-bold text-[#666D80] transition cursor-pointer"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white hover:bg-[#F6F8FA] text-xs font-bold text-[#666D80] transition cursor-pointer"
                 title="Reset to Center"
               >
                 <RotateCcw className="w-3 h-3" />
@@ -368,14 +368,14 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
 
           {/* Fine Tune Drawer: Directional Nudge Arrows & Zoom Scale */}
           {showFineTune && (
-            <div className="pt-2 border-t border-[#DFE1E6] flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in duration-150">
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in duration-150">
               {/* Directional Arrows */}
               <div className="flex items-center gap-1">
                 <span className="text-[11px] font-bold text-[#666D80] mr-1">Nudge:</span>
                 <button
                   type="button"
                   onClick={() => nudge(-5, 0)}
-                  className="p-1.5 rounded-lg bg-white border border-[#DFE1E6] hover:bg-[#ECEFF3] text-[#1A1B25] transition cursor-pointer"
+                  className="p-1.5 rounded-lg bg-white hover:bg-[#ECEFF3] text-[#1A1B25] transition cursor-pointer"
                   title="Move Left"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
@@ -384,7 +384,7 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
                   <button
                     type="button"
                     onClick={() => nudge(0, -5)}
-                    className="p-1 rounded-md bg-white border border-[#DFE1E6] hover:bg-[#ECEFF3] text-[#1A1B25] transition cursor-pointer"
+                    className="p-1 rounded-md bg-white hover:bg-[#ECEFF3] text-[#1A1B25] transition cursor-pointer"
                     title="Move Up"
                   >
                     <ChevronUp className="w-3 h-3" />
@@ -392,7 +392,7 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
                   <button
                     type="button"
                     onClick={() => nudge(0, 5)}
-                    className="p-1 rounded-md bg-white border border-[#DFE1E6] hover:bg-[#ECEFF3] text-[#1A1B25] transition cursor-pointer"
+                    className="p-1 rounded-md bg-white hover:bg-[#ECEFF3] text-[#1A1B25] transition cursor-pointer"
                     title="Move Down"
                   >
                     <ChevronDown className="w-3 h-3" />
@@ -401,7 +401,7 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
                 <button
                   type="button"
                   onClick={() => nudge(5, 0)}
-                  className="p-1.5 rounded-lg bg-white border border-[#DFE1E6] hover:bg-[#ECEFF3] text-[#1A1B25] transition cursor-pointer"
+                  className="p-1.5 rounded-lg bg-white hover:bg-[#ECEFF3] text-[#1A1B25] transition cursor-pointer"
                   title="Move Right"
                 >
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -419,7 +419,7 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
                   type="button"
                   onClick={() => handleZoom(-0.1)}
                   disabled={(internalPos.scale ?? 1) <= 1}
-                  className="p-1 rounded-lg bg-white border border-[#DFE1E6] hover:bg-[#ECEFF3] disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+                  className="p-1 rounded-lg bg-white hover:bg-[#ECEFF3] disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
                   title="Zoom Out"
                 >
                   <ZoomOut className="w-3.5 h-3.5 text-[#666D80]" />
@@ -442,7 +442,7 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
                   type="button"
                   onClick={() => handleZoom(0.1)}
                   disabled={(internalPos.scale ?? 1) >= 2.5}
-                  className="p-1 rounded-lg bg-white border border-[#DFE1E6] hover:bg-[#ECEFF3] disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+                  className="p-1 rounded-lg bg-white hover:bg-[#ECEFF3] disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
                   title="Zoom In"
                 >
                   <ZoomIn className="w-3.5 h-3.5 text-[#666D80]" />

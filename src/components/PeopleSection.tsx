@@ -1,13 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Users, 
   Crown, 
-  Shield, 
-  User, 
   UserPlus, 
-  Share2, 
-  MoreHorizontal,
-  CheckCircle2
+  Search, 
+  ChevronDown, 
+  Check 
 } from 'lucide-react';
 import { BoardMember, UserPersona, MemberRole } from '../types';
 
@@ -26,9 +23,32 @@ export const PeopleSection: React.FC<PeopleSectionProps> = ({
   onAssignResponsibility,
   onOpenShare,
 }) => {
-  const isOwner = currentPersona.role === 'owner';
+  const currentMember = members.find(
+    (m) =>
+      m.id === currentPersona?.id ||
+      (Boolean(m.name) && Boolean(currentPersona?.name) && m.name.toLowerCase() === currentPersona?.name.toLowerCase())
+  );
+  const resolvedCurrentRole = currentMember?.role || currentPersona?.role;
+  const isOwner = resolvedCurrentRole === 'owner';
+  const isAdmin = resolvedCurrentRole === 'admin';
+  const canManageRoles = isOwner || isAdmin;
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [openRoleMenuId, setOpenRoleMenuId] = useState<string | null>(null);
   const [editingResponsibilityFor, setEditingResponsibilityFor] = useState<string | null>(null);
   const [responsibilityText, setResponsibilityText] = useState('');
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.role-dropdown-wrapper')) {
+        setOpenRoleMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleSaveResponsibility = (memberId: string) => {
     onAssignResponsibility(memberId, responsibilityText.trim());
@@ -36,167 +56,220 @@ export const PeopleSection: React.FC<PeopleSectionProps> = ({
     setResponsibilityText('');
   };
 
+  const filteredMembers = members.filter((member) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      member.name.toLowerCase().includes(q) ||
+      (member.role && member.role.toLowerCase().includes(q)) ||
+      (member.responsibility && member.responsibility.toLowerCase().includes(q))
+    );
+  });
+
   return (
-    <section id="people-section" className="mb-8 scroll-mt-20">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+    <section id="people-section" className="scroll-mt-20">
+      {/* Section Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
-          <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-purple-600">
-            <Users className="w-3.5 h-3.5" />
-            <span>Participants & Permissions</span>
-          </div>
           <h2 className="text-xl sm:text-2xl font-black text-[#1A1B25]">
-            People Planning Together ({members.length})
+            Participants ({members.length})
           </h2>
-          <p className="text-xs text-[#666D80]">
+          <p className="text-xs sm:text-sm text-[#808897] mt-0.5">
             Owner, Assistants, and Members building the event
           </p>
         </div>
 
         <button
+          type="button"
           onClick={onOpenShare}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white border border-[#DFE1E6] hover:bg-[#F6F8FA] text-xs font-bold text-[#1A1B25] transition cursor-pointer shadow-xs self-start sm:self-auto"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-[#DFE1E6] hover:bg-[#F6F8FA] text-xs font-bold text-[#1A1B25] transition cursor-pointer shadow-xs self-start sm:self-auto"
         >
-          <UserPlus className="w-3.5 h-3.5" />
-          <span>Invite More Friends</span>
+          <UserPlus className="w-3.5 h-3.5 text-[#666D80]" />
+          <span>Invite Friends</span>
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-        {members.map((member) => {
-          const isCurrentUser = member.id === currentPersona.id;
-          const isMemberOwner = member.role === 'owner';
-          const isMemberAdmin = member.role === 'admin';
+      {/* Main Card Container */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#F6F8FA] shadow-[3px_4px_20px_0px_#ECEFF3]">
+        {/* Search Bar */}
+        <div className="relative mb-4">
+          <Search className="w-4 h-4 text-[#808897] absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search"
+            className="w-full pl-11 pr-4 py-2.5 rounded-full bg-white border border-[#DFE1E6] text-xs sm:text-sm text-[#1A1B25] placeholder-[#808897] focus:outline-none focus:border-[#808897] transition"
+          />
+        </div>
 
-          return (
-            <div
-              key={member.id}
-              className={`rounded-2xl p-4 border transition shadow-xs flex flex-col justify-between ${
-                isCurrentUser
-                  ? 'bg-amber-50/40 border-amber-200'
-                  : 'bg-white border-[#ECEFF3] hover:border-[#DFE1E6]'
-              }`}
-            >
-              <div>
-                {/* Top Info */}
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2.5">
-                    <img
-                      src={member.avatar}
-                      alt={member.name}
-                      className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-2xs"
-                    />
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-black text-[#1A1B25]">
-                          {member.name}
-                        </span>
-                        {isCurrentUser && (
-                          <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded-md">
-                            You
-                          </span>
-                        )}
-                      </div>
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                        isMemberOwner
-                          ? 'bg-purple-100 text-purple-800'
-                          : isMemberAdmin
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-gray-100 text-[#666D80]'
-                      }`}>
-                        {isMemberOwner ? (
-                          <>
-                            <Crown className="w-2.5 h-2.5 text-amber-600" />
-                            Owner
-                          </>
-                        ) : isMemberAdmin ? (
-                          <>
-                            <Shield className="w-2.5 h-2.5 text-blue-600" />
-                            Admin
-                          </>
-                        ) : (
-                          <>
-                            <User className="w-2.5 h-2.5" />
-                            Member
-                          </>
-                        )}
+        {/* Member List */}
+        <div className="divide-y divide-[#ECEFF3]">
+          {filteredMembers.map((member) => {
+            const isCurrentUser = member.id === currentPersona.id;
+            const isMemberOwner = member.role === 'owner';
+            const isMemberAdmin = member.role === 'admin';
+            const isRoleMenuOpen = openRoleMenuId === member.id;
+
+            return (
+              <div
+                key={member.id}
+                className="py-3 sm:py-3.5 flex items-center justify-between gap-3"
+              >
+                {/* Left: Avatar & Names */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <img
+                    src={member.avatar}
+                    alt={member.name}
+                    className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm sm:text-base font-bold text-[#1A1B25] truncate">
+                        {member.name}
                       </span>
+                      {isCurrentUser && (
+                        <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                          You
+                        </span>
+                      )}
                     </div>
-                  </div>
-                </div>
 
-                {/* Responsibility */}
-                <div className="mt-2 text-xs">
-                  {editingResponsibilityFor === member.id ? (
-                    <div className="space-y-1.5">
-                      <input
-                        type="text"
-                        placeholder="e.g. Managing Food & Drinks"
-                        value={responsibilityText}
-                        onChange={(e) => setResponsibilityText(e.target.value)}
-                        className="w-full px-2 py-1 text-xs rounded-lg border border-[#DFE1E6] focus:outline-amber-500"
-                        autoFocus
-                      />
-                      <div className="flex items-center gap-1">
+                    {/* Responsibility / Assigned Duty */}
+                    {editingResponsibilityFor === member.id ? (
+                      <div className="flex items-center gap-1.5 mt-1.5">
+                        <input
+                          type="text"
+                          placeholder="e.g. Sound system & DJ"
+                          value={responsibilityText}
+                          onChange={(e) => setResponsibilityText(e.target.value)}
+                          className="px-2.5 py-1 text-xs rounded-lg border border-[#DFE1E6] focus:outline-none focus:border-[#808897]"
+                          autoFocus
+                        />
                         <button
+                          type="button"
                           onClick={() => handleSaveResponsibility(member.id)}
-                          className="px-2 py-0.5 rounded-md bg-[#1A1B25] text-white text-[11px] font-bold cursor-pointer"
+                          className="px-2.5 py-1 rounded-full bg-[#1A1B25] text-white text-[11px] font-bold cursor-pointer"
                         >
                           Save
                         </button>
                         <button
+                          type="button"
                           onClick={() => setEditingResponsibilityFor(null)}
-                          className="px-2 py-0.5 rounded-md bg-gray-100 text-[#666D80] text-[11px] font-bold cursor-pointer"
+                          className="px-2.5 py-1 rounded-full bg-[#ECEFF3] text-[#666D80] text-[11px] font-bold cursor-pointer"
                         >
                           Cancel
                         </button>
                       </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-xs text-[#808897] mt-0.5">
+                        <span className="truncate">
+                          {member.responsibility || 'No assigned duty'}
+                        </span>
+                        {isOwner && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingResponsibilityFor(member.id);
+                              setResponsibilityText(member.responsibility || '');
+                            }}
+                            className="text-[11px] font-semibold text-amber-700 hover:underline cursor-pointer shrink-0"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right: Role Badge / Dropdown */}
+                <div className="relative shrink-0 role-dropdown-wrapper">
+                  {isMemberOwner ? (
+                    <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-[#F59E0B] text-[#D97706] bg-[#FFFDF5] text-xs font-bold">
+                      <Crown className="w-3.5 h-3.5 text-[#D97706]" />
+                      <span>Owner</span>
                     </div>
+                  ) : isMemberAdmin ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenRoleMenuId(isRoleMenuOpen ? null : member.id);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-[#DFE1E6] text-[#2563EB] bg-white text-xs font-semibold hover:bg-[#F8F9FB] hover:border-[#C1C7CF] transition cursor-pointer shadow-2xs"
+                    >
+                      <span>Admin</span>
+                      <ChevronDown className={`w-3.5 h-3.5 text-[#808897] transition-transform duration-200 ${isRoleMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
                   ) : (
-                    <div className="flex items-center justify-between gap-1 text-[#666D80]">
-                      <span className="font-semibold truncate">
-                        {member.responsibility || 'No assigned duty'}
-                      </span>
-                      {isOwner && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenRoleMenuId(isRoleMenuOpen ? null : member.id);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-[#DFE1E6] text-[#666D80] bg-white text-xs font-semibold hover:bg-[#F8F9FB] hover:border-[#C1C7CF] transition cursor-pointer shadow-2xs"
+                    >
+                      <span>Member</span>
+                      <ChevronDown className={`w-3.5 h-3.5 text-[#808897] transition-transform duration-200 ${isRoleMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                  )}
+
+                  {/* Role Change Dropdown Menu */}
+                  {isRoleMenuOpen && (
+                    canManageRoles ? (
+                      <div className="absolute right-0 top-full mt-1.5 w-44 rounded-2xl bg-white border border-[#DFE1E6] shadow-xl p-1.5 z-30 space-y-0.5 animate-in fade-in zoom-in-95 duration-100">
+                        <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-[#808897]">
+                          Change Role:
+                        </div>
                         <button
+                          type="button"
                           onClick={() => {
-                            setEditingResponsibilityFor(member.id);
-                            setResponsibilityText(member.responsibility || '');
+                            onUpdateMemberRole(member.id, 'member');
+                            setOpenRoleMenuId(null);
                           }}
-                          className="text-[10px] text-amber-700 hover:underline cursor-pointer shrink-0"
+                          className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
+                            !isMemberAdmin ? 'bg-[#F8F9FB] text-[#1A1B25] font-extrabold' : 'text-[#666D80] hover:bg-[#F8F9FB]'
+                          }`}
                         >
-                          Edit
+                          <span>Member</span>
+                          {!isMemberAdmin && <Check className="w-3.5 h-3.5 text-[#1A1B25] stroke-[2.5]" />}
                         </button>
-                      )}
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onUpdateMemberRole(member.id, 'admin');
+                            setOpenRoleMenuId(null);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
+                            isMemberAdmin ? 'bg-[#EFF6FF] text-[#2563EB] font-extrabold' : 'text-[#1A1B25] hover:bg-[#F8F9FB]'
+                          }`}
+                        >
+                          <span>Admin</span>
+                          {isMemberAdmin && <Check className="w-3.5 h-3.5 text-[#2563EB] stroke-[2.5]" />}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="absolute right-0 top-full mt-1.5 w-52 rounded-2xl bg-white border border-[#DFE1E6] shadow-xl p-3 z-30 text-center animate-in fade-in zoom-in-95 duration-100">
+                        <div className="text-xs font-bold text-[#1A1B25] mb-1">Role Management</div>
+                        <p className="text-[11px] text-[#808897] leading-relaxed">
+                          Only the Board Owner and Admins have permission to manage member roles.
+                        </p>
+                      </div>
+                    )
                   )}
                 </div>
               </div>
+            );
+          })}
 
-              {/* Owner Role Management Controls */}
-              {isOwner && !isMemberOwner && (
-                <div className="mt-3 pt-2 border-t border-[#ECEFF3] flex items-center justify-between text-[11px] font-bold">
-                  <span className="text-[#808897]">Role:</span>
-                  {member.role === 'admin' ? (
-                    <button
-                      onClick={() => onUpdateMemberRole(member.id, 'member')}
-                      className="text-rose-600 hover:underline cursor-pointer"
-                    >
-                      Demote to Member
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => onUpdateMemberRole(member.id, 'admin')}
-                      className="text-blue-700 hover:underline cursor-pointer"
-                    >
-                      Promote to Admin / Assistant
-                    </button>
-                  )}
-                </div>
-              )}
+          {filteredMembers.length === 0 && (
+            <div className="py-8 text-center text-xs text-[#808897]">
+              No participants matching "{searchQuery}"
             </div>
-          );
-        })}
+          )}
+        </div>
       </div>
     </section>
   );
 };
+

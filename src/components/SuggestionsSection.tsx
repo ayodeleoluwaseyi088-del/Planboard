@@ -1,15 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Heart, 
   Plus, 
   CheckCircle2, 
   Sparkles, 
-  Camera,
   Vote,
   Trash2,
   Check,
   Flame,
-  Clock,
   Filter,
   Layers,
   ArrowUpDown,
@@ -20,7 +18,9 @@ import {
   ChevronRight,
   Maximize2,
   Grid as GridIcon,
-  Eye
+  Eye,
+  Image as ImageIcon,
+  ExternalLink
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { SuggestionItem, UserPersona, AttachedPlan, ImagePosition } from '../types';
@@ -53,8 +53,7 @@ export const SuggestionsSection: React.FC<SuggestionsSectionProps> = ({
   // Owner and Assistant Admin can manage suggestions
   const canManage = currentPersona.role === 'owner' || currentPersona.role === 'admin';
 
-  // Active filter by plan (or 'all')
-  const [selectedPlanFilter, setSelectedPlanFilter] = useState<string>('all');
+
   
   // Sort order: 'likes' (Most liked → least liked) or 'newest'
   const [sortBy, setSortBy] = useState<'likes' | 'newest'>('likes');
@@ -74,14 +73,22 @@ export const SuggestionsSection: React.FC<SuggestionsSectionProps> = ({
   const [previewSug, setPreviewSug] = useState<SuggestionItem | null>(null);
   const [previewActiveIndex, setPreviewActiveIndex] = useState<number>(0);
   const [previewViewMode, setPreviewViewMode] = useState<'focus' | 'grid'>('focus');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
 
   // Keyboard shortcut listener for preview modal (Esc to close, Left/Right arrows to browse)
   useEffect(() => {
-    if (!previewSug) return;
+    if (!previewSug) {
+      setShowDeleteConfirm(false);
+      return;
+    }
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setPreviewSug(null);
+        if (showDeleteConfirm) {
+          setShowDeleteConfirm(false);
+        } else {
+          setPreviewSug(null);
+        }
       } else if (e.key === 'ArrowLeft') {
         const total = (previewSug.images && previewSug.images.length > 0) ? previewSug.images.length : 1;
         if (total > 1) {
@@ -111,7 +118,8 @@ export const SuggestionsSection: React.FC<SuggestionsSectionProps> = ({
       // Fallback matching if legacy data
       return (
         s.category.toLowerCase().includes(plan.title.toLowerCase()) ||
-        s.category.toLowerCase().includes((plan.category || '').toLowerCase())
+        s.category.toLowerCase().includes((plan.category || '').toLowerCase()) ||
+        (s.planTitle && s.planTitle.toLowerCase() === plan.title.toLowerCase())
       );
     });
 
@@ -135,177 +143,156 @@ export const SuggestionsSection: React.FC<SuggestionsSectionProps> = ({
     };
   });
 
-  // Filter groups if a specific plan filter is active
-  const displayedGroups = selectedPlanFilter === 'all'
-    ? planGroups
-    : planGroups.filter((g) => g.plan.id === selectedPlanFilter);
+  // Dynamic Tabs: ONLY display tabs for Plans/Categories that currently have at least one visual suggestion attached
+  const visiblePlanGroups = planGroups.filter((g) => g.suggestions.length > 0);
 
-  // Total count of suggestions across all plans
-  const totalSuggestionsCount = suggestions.length;
+  // In case there are orphan suggestions that don't match any existing plan in `plans`, present them under their category
+  const matchedSuggestionIds = new Set<string>();
+  visiblePlanGroups.forEach((g) => {
+    g.suggestions.forEach((s) => matchedSuggestionIds.add(s.id));
+  });
+
+  const unmatchedSuggestions = suggestions.filter((s) => !matchedSuggestionIds.has(s.id));
+  if (unmatchedSuggestions.length > 0) {
+    const extraCategoriesMap = new Map<string, SuggestionItem[]>();
+    unmatchedSuggestions.forEach((s) => {
+      const catKey = s.planTitle || s.category.replace(/^[^\w\s]+\s*/, '').trim() || 'General';
+      const list = extraCategoriesMap.get(catKey) || [];
+      list.push(s);
+      extraCategoriesMap.set(catKey, list);
+    });
+
+    extraCategoriesMap.forEach((sugList, catName) => {
+      const virtualPlan: AttachedPlan = {
+        id: `virtual-${catName.toLowerCase().replace(/\s+/g, '-')}`,
+        title: catName,
+        emoji: sugList[0]?.planEmoji || '📌',
+        category: catName,
+        deciderType: 'photo_idea',
+        status: 'active',
+        priority: 'optional',
+      };
+      visiblePlanGroups.push({
+        plan: virtualPlan,
+        suggestions: sugList,
+        totalLikes: sugList.reduce((acc, curr) => acc + curr.heartCount, 0),
+      });
+    });
+  }
+
+  // Active category tab (strictly per-plan with visual suggestions, never empty tab)
+  const [selectedPlanFilter, setSelectedPlanFilter] = useState<string>(() => {
+    return visiblePlanGroups.length > 0 ? visiblePlanGroups[0].plan.id : '';
+  });
+
+  const prevSuggestionsLengthRef = useRef(suggestions.length);
+
+  // Dynamic synchronization of selected category tab:
+  // - If a new suggestion was added, automatically select its tab so the user sees it immediately
+  // - If the current tab's suggestions were deleted (or invalid), automatically fallback to the first active tab
+  // - If all suggestions were deleted across all plans, clear the selection
+  useEffect(() => {
+    // If a new suggestion was added, auto-select its tab
+    if (suggestions.length > prevSuggestionsLengthRef.current && suggestions[0]) {
+      const newestSug = suggestions[0];
+      const targetGroup = visiblePlanGroups.find(
+        (g) => g.plan.id === newestSug.planId || 
+               g.suggestions.some((s) => s.id === newestSug.id) ||
+               (newestSug.planTitle && g.plan.title.toLowerCase() === newestSug.planTitle.toLowerCase())
+      );
+      if (targetGroup) {
+        setSelectedPlanFilter(targetGroup.plan.id);
+        prevSuggestionsLengthRef.current = suggestions.length;
+        return;
+      }
+    }
+    prevSuggestionsLengthRef.current = suggestions.length;
+
+    if (visiblePlanGroups.length > 0) {
+      const isCurrentFilterValid = visiblePlanGroups.some((g) => g.plan.id === selectedPlanFilter);
+      if (!isCurrentFilterValid) {
+        setSelectedPlanFilter(visiblePlanGroups[0].plan.id);
+      }
+    } else if (selectedPlanFilter !== '') {
+      setSelectedPlanFilter('');
+    }
+  }, [visiblePlanGroups, selectedPlanFilter, suggestions]);
+
+  // Active plan group for the selected category tab (strictly from visiblePlanGroups)
+  const activeGroup = visiblePlanGroups.find((g) => g.plan.id === selectedPlanFilter) || visiblePlanGroups[0] || null;
 
   return (
     <section id="suggestions-section" className="mb-8 scroll-mt-20">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+      <div className="flex items-center justify-between gap-4 mb-6">
         <div>
-          <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-rose-500">
-            <Camera className="w-3.5 h-3.5" />
-            <span>Visual Ideas • Plan Locked</span>
-          </div>
-          <h2 className="text-xl sm:text-2xl font-black text-[#1A1B25]">
+          <h2 className="text-xl sm:text-[22px] font-bold text-[#1A1B25] tracking-tight">
             Visual Suggestions
           </h2>
-          <p className="text-xs text-[#666D80]">
-            Every suggestion belongs to a specific plan. Ranked by popularity (Most liked → least liked).
+          <p className="text-xs sm:text-sm text-[#808897] mt-1 font-normal">
+            Browse and vote on visual inspiration by category. Ranked by popularity.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Sort order toggle */}
-          <button
-            onClick={() => setSortBy((prev) => (prev === 'likes' ? 'newest' : 'likes'))}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F8F9FB] border border-[#ECEFF3] text-xs font-extrabold text-[#353849] hover:bg-white transition cursor-pointer"
-            title="Toggle sort order"
-          >
-            {sortBy === 'likes' ? (
-              <>
-                <Flame className="w-3.5 h-3.5 text-amber-500" />
-                <span>Most Liked</span>
-              </>
-            ) : (
-              <>
-                <Clock className="w-3.5 h-3.5 text-blue-500" />
-                <span>Newest</span>
-              </>
-            )}
-          </button>
-
-          {/* Suggest an Idea Button */}
-          <button
-            onClick={() => onOpenAddSuggestion()}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#1A1B25] hover:bg-[#272835] text-xs font-black text-white transition cursor-pointer shadow-xs"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Suggest an Idea</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Plan Selector Pills / Filter */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-4 scrollbar-none">
         <button
-          onClick={() => setSelectedPlanFilter('all')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition cursor-pointer ${
-            selectedPlanFilter === 'all'
-              ? 'bg-[#1A1B25] text-white shadow-xs'
-              : 'bg-white border border-[#ECEFF3] text-[#353849] hover:bg-[#F6F8FA]'
-          }`}
+          type="button"
+          id="main-add-visual-suggestion-btn"
+          onClick={() => onOpenAddSuggestion(selectedPlanFilter || (plans.length > 0 ? plans[0].id : undefined))}
+          className="w-11 h-11 shrink-0 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white flex items-center justify-center transition-all cursor-pointer shadow-xs hover:scale-105 active:scale-95"
+          title="Add visual suggestion"
+          aria-label="Add visual suggestion"
         >
-          <Layers className="w-3.5 h-3.5" />
-          <span>All Plans ({totalSuggestionsCount})</span>
+          <Plus className="w-5 h-5 text-white stroke-[2.2]" />
         </button>
-
-        {plans.map((p) => {
-          const count = suggestions.filter((s) => s.planId === p.id).length;
-          const isSelected = selectedPlanFilter === p.id;
-          return (
-            <button
-              key={p.id}
-              onClick={() => setSelectedPlanFilter(p.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition cursor-pointer ${
-                isSelected
-                  ? 'bg-[#1A1B25] text-white shadow-xs'
-                  : 'bg-white border border-[#ECEFF3] text-[#353849] hover:bg-[#F6F8FA]'
-              }`}
-            >
-              <span>{p.emoji || '📌'}</span>
-              <span>{p.title}</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
-                isSelected ? 'bg-white/20 text-white' : 'bg-[#ECEFF3] text-[#666D80]'
-              }`}>
-                {count}
-              </span>
-            </button>
-          );
-        })}
       </div>
 
-      {/* Plan-Locked Groups */}
-      <div className="space-y-8">
-        {displayedGroups.map(({ plan, suggestions: planSuggestions, totalLikes }) => {
-          // Current plan choice label
-          const currentPlanSelection = plan.location || plan.infoValue || plan.finalDecision || plan.description;
+      {/* Plan Category Tabs (Strictly dynamic: only display tabs with >= 1 visual suggestion, never empty tabs) */}
+      {visiblePlanGroups.length > 0 && (
+        <div className="flex items-center gap-2.5 sm:gap-3 overflow-x-auto pb-1 mb-6 scrollbar-none">
+          {visiblePlanGroups.map((group) => {
+            const p = group.plan;
+            const count = group.suggestions.length;
+            const isSelected = selectedPlanFilter === p.id;
+            return (
+              <button
+                key={p.id}
+                id={`plan-tab-${p.id}`}
+                type="button"
+                onClick={() => setSelectedPlanFilter(p.id)}
+                className={`flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-sm sm:text-[15px] whitespace-nowrap transition cursor-pointer select-none ${
+                  isSelected
+                    ? 'bg-[#ECEFF3] text-[#1A1B25] font-bold border border-transparent'
+                    : 'bg-white border border-[#DFE1E6] text-[#666D80] font-semibold hover:bg-[#F6F8FA] hover:text-[#272835]'
+                }`}
+              >
+                <span>{p.emoji || '📌'}</span>
+                <span>{p.title}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                  isSelected ? 'bg-white text-[#1A1B25]' : 'bg-[#ECEFF3] text-[#666D80]'
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
-          return (
-            <div
-              key={plan.id}
-              className="bg-white rounded-3xl border border-[#ECEFF3] p-5 shadow-xs transition-all hover:border-[#DFE1E6]"
-            >
-              {/* Plan Group Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-4 border-b border-[#ECEFF3]">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-[#F8F9FB] border border-[#ECEFF3] flex items-center justify-center text-xl shrink-0 shadow-xs">
-                    {plan.emoji || '📍'}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-black text-[#1A1B25]">
-                        {plan.title}
-                      </h3>
-                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-[#F6F8FA] border border-[#DFE1E6] font-bold text-[#666D80]">
-                        Plan ID: {plan.title.toLowerCase()}
-                      </span>
-                    </div>
-
-                    {/* Current Selection / Value of the Plan */}
-                    {currentPlanSelection && (
-                      <p className="text-xs text-[#666D80] mt-0.5 flex items-center gap-1.5">
-                        <span className="font-extrabold text-[#1A1B25]">Current Selection:</span>
-                        <span className="truncate max-w-md bg-[#F8F9FB] px-2 py-0.5 rounded text-[#353849] font-medium border border-[#ECEFF3]">
-                          {currentPlanSelection}
-                        </span>
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Plan Group Stats & Quick Suggest */}
-                <div className="flex items-center gap-2 self-end sm:self-center">
-                  <div className="text-right hidden sm:block">
-                    <span className="text-[11px] font-bold text-[#666D80]">
-                      {planSuggestions.length} {planSuggestions.length === 1 ? 'idea' : 'ideas'} • {totalLikes} {totalLikes === 1 ? 'like' : 'likes'}
-                    </span>
-                  </div>
-
-                  <button
-                    onClick={() => onOpenAddSuggestion(plan.id)}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#F8F9FB] border border-[#DFE1E6] hover:bg-[#ECEFF3] text-xs font-extrabold text-[#1A1B25] transition cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-rose-500" />
-                    <span>Suggest for {plan.title}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Suggestions Cards inside this Plan */}
-              {planSuggestions.length === 0 ? (
-                <div className="text-center py-8 px-4 rounded-2xl bg-[#F8F9FB] border border-dashed border-[#DFE1E6]">
-                  <p className="text-xs font-bold text-[#666D80] mb-2">
-                    No visual suggestions yet for {plan.title}.
-                  </p>
-                  <button
-                    onClick={() => onOpenAddSuggestion(plan.id)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white border border-[#DFE1E6] hover:bg-[#F6F8FA] text-xs font-black text-[#1A1B25] transition cursor-pointer shadow-xs"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-rose-500" />
-                    <span>Be the first to suggest an idea</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {planSuggestions.map((item, index) => {
+      {/* Active Category Visual Gallery (Clean grid with no repetitive sub-headers) */}
+      {!activeGroup || activeGroup.suggestions.length === 0 ? (
+        <div className="w-full py-16 sm:py-24 flex flex-col items-center justify-center text-center select-none">
+          <ImageIcon className="w-9 h-9 text-[#272835] stroke-[2.2] mb-4" />
+          <h3 className="text-xl sm:text-2xl font-bold text-[#272835] tracking-tight leading-snug mb-2">
+            No visual ideas yet
+          </h3>
+          <p className="text-sm sm:text-base text-[#808897] font-normal tracking-normal max-w-lg leading-relaxed">
+            Use the add button above to add an idea to any category
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {activeGroup.suggestions.map((item, index) => {
                     const hasHearted = item.heartedByMemberIds.includes(currentPersona.id);
-                    const isDeleting = deletingId === item.id;
 
                     const imagesList = item.images && item.images.length > 0
                       ? item.images
@@ -323,332 +310,267 @@ export const SuggestionsSection: React.FC<SuggestionsSectionProps> = ({
                           setPreviewSug(item);
                           setPreviewActiveIndex(activeIdx);
                         }}
-                        className={`rounded-2xl overflow-hidden border transition shadow-xs flex flex-col justify-between cursor-pointer group/card hover:shadow-md ${
+                        className={`group/card relative rounded-2xl overflow-hidden bg-[#ECEFF3] aspect-[4/3] shadow-xs hover:shadow-xl transition-all duration-300 cursor-pointer select-none ${
                           item.isSelectedWinner
-                            ? 'bg-emerald-50/20 border-emerald-400 ring-2 ring-emerald-500/20'
+                            ? 'ring-2 ring-emerald-500 shadow-emerald-500/10'
                             : item.isPutUpForVote
-                            ? 'bg-indigo-50/20 border-indigo-300 ring-1 ring-indigo-500/20'
-                            : 'bg-white border-[#ECEFF3] hover:border-[#DFE1E6]'
+                            ? 'ring-2 ring-indigo-500 shadow-indigo-500/10'
+                            : ''
                         }`}
                         title="Click to view full photos and details"
                       >
-                        <div>
-                          {/* Image Card Container */}
-                          <div className="relative h-44 w-full overflow-hidden bg-[#ECEFF3] group">
-                            <img
-                              src={currentImg.url}
-                              alt={currentImg.title || item.title}
-                              style={getImageStyle(currentImg.position || item.imagePosition)}
-                              className="w-full h-full object-cover transition-transform duration-500 group-hover/card:scale-105"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/30 pointer-events-none" />
+                        {/* High-Resolution Gallery Photo */}
+                        <img
+                          src={currentImg.url}
+                          alt={currentImg.title || item.title}
+                          style={getImageStyle(currentImg.position || item.imagePosition)}
+                          className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover/card:scale-105"
+                          loading="lazy"
+                        />
 
-                            {/* Hover zoom pill hint */}
-                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
-                              <span className="px-3 py-1.5 rounded-full bg-black/75 backdrop-blur-md text-white text-xs font-bold flex items-center gap-1.5 shadow-lg transform scale-95 group-hover/card:scale-100 transition-transform">
-                                <Maximize2 className="w-3.5 h-3.5 text-amber-400" />
-                                <span>View Full Photos</span>
+                        {/* Soft Vignette Overlay: Subtle at rest, atmospheric on hover */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-black/15 opacity-75 group-hover/card:opacity-95 transition-opacity duration-300 pointer-events-none" />
+
+                        {/* TOP FLOATING CONTROLS */}
+                        <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none z-10">
+                          {/* Left Badges */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {item.isSelectedWinner && (
+                              <span className="pointer-events-auto px-2.5 py-1 rounded-full bg-emerald-500 text-white text-[11px] font-bold shadow-md flex items-center gap-1 backdrop-blur-xs">
+                                <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                                <span>Selected</span>
                               </span>
-                            </div>
-
-                            {/* Multi-Image Carousel Controls */}
-                            {isMulti && (
-                              <div className="absolute inset-y-0 left-1.5 right-1.5 flex items-center justify-between pointer-events-none z-10">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveImageIndices((prev) => ({
-                                      ...prev,
-                                      [item.id]: (activeIdx - 1 + imagesList.length) % imagesList.length,
-                                    }));
-                                  }}
-                                  className="pointer-events-auto w-7 h-7 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center transition cursor-pointer shadow-xs active:scale-90"
-                                  title="Previous photo in suggestion group"
-                                >
-                                  <ChevronLeft className="w-4 h-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveImageIndices((prev) => ({
-                                      ...prev,
-                                      [item.id]: (activeIdx + 1) % imagesList.length,
-                                    }));
-                                  }}
-                                  className="pointer-events-auto w-7 h-7 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center transition cursor-pointer shadow-xs active:scale-90"
-                                  title="Next photo in suggestion group"
-                                >
-                                  <ChevronRight className="w-4 h-4" />
-                                </button>
-                              </div>
                             )}
-
-                            {/* Top Badges */}
-                            <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1.5 z-10">
-                              <div className="flex items-center gap-1.5">
-                                {/* Popularity Rank Badge */}
-                                <span className="px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-white text-[10px] font-black flex items-center gap-1">
-                                  {index === 0 && sortBy === 'likes' ? (
-                                    <>
-                                      <Flame className="w-3 h-3 text-amber-400" />
-                                      <span>#1 Top Liked</span>
-                                    </>
-                                  ) : (
-                                    <span>#{index + 1}</span>
-                                  )}
-                                </span>
-
-                                {/* Grouped Multi-Image Pill Badge */}
-                                {isMulti && (
-                                  <span className="px-2 py-0.5 rounded-md bg-amber-500/90 backdrop-blur-md text-white text-[10px] font-black flex items-center gap-1 shadow-xs">
-                                    <Layers className="w-3 h-3" />
-                                    <span>{imagesList.length} Photos</span>
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-1">
-                                {/* Reposition Photo Button */}
-                                {onUpdateSuggestionPosition && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setRepositioningSug(item);
-                                      setRepositionImageIndex(activeIdx);
-                                      setTempPosition(currentImg.position || item.imagePosition || { ...DEFAULT_IMAGE_POSITION });
-                                    }}
-                                    className="p-1 rounded-md bg-black/60 hover:bg-black/90 text-white backdrop-blur-md transition cursor-pointer"
-                                    title="Drag and adjust photo position"
-                                  >
-                                    <Move className="w-3 h-3" />
-                                  </button>
-                                )}
-
-                                {/* Voting Status Badge */}
-                                {item.isPutUpForVote && (
-                                  <span className="px-2 py-0.5 rounded-md bg-indigo-600/90 backdrop-blur-md text-white text-[10px] font-black flex items-center gap-1 shadow-xs">
-                                    <Vote className="w-3 h-3" />
-                                    <span>In Voting</span>
-                                  </span>
-                                )}
-
-                                {/* Selected Winner Badge */}
-                                {item.isSelectedWinner && (
-                                  <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-black flex items-center gap-1 shadow-xs">
-                                    <CheckCircle2 className="w-3 h-3" />
-                                    <span>Current Selection ✓</span>
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Bottom info on image */}
-                            <div className="absolute bottom-2 left-2.5 right-2.5 text-white flex items-center justify-between z-10">
-                              <span className="text-[11px] font-bold text-white/95 truncate">
-                                Suggested by {item.authorName}
+                            {item.isPutUpForVote && !item.isSelectedWinner && (
+                              <span className="pointer-events-auto px-2.5 py-1 rounded-full bg-indigo-600 text-white text-[11px] font-bold shadow-md flex items-center gap-1 backdrop-blur-xs">
+                                <Vote className="w-3.5 h-3.5" />
+                                <span>In Voting</span>
                               </span>
-                              <div className="flex items-center gap-1.5">
-                                {isMulti && (
-                                  <span className="text-[10px] font-black bg-black/60 backdrop-blur-xs text-white/90 px-1.5 py-0.5 rounded">
-                                    {activeIdx + 1} / {imagesList.length}
-                                  </span>
-                                )}
-                                <span className="text-[10px] font-black text-rose-300 bg-black/60 px-1.5 py-0.5 rounded">
-                                  {item.heartCount} ❤️
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Body Details */}
-                          <div className="p-3.5">
-                            <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-[#666D80] mb-1">
-                              <span>{plan.emoji} {plan.title}</span>
-                            </div>
-                            <h4 className="text-sm font-extrabold text-[#1A1B25] mb-1 leading-snug">
-                              {item.title}
-                            </h4>
-                            <p className="text-xs text-[#666D80] line-clamp-2">
-                              {item.description}
-                            </p>
-
-                            {/* Multi-Image Thumbnail Gallery Tray */}
+                            )}
                             {isMulti && (
-                              <div className="mt-3 pt-2.5 border-t border-[#ECEFF3]">
-                                <div className="flex items-center justify-between mb-1.5">
-                                  <span className="text-[10px] font-black uppercase tracking-wider text-[#666D80] flex items-center gap-1">
-                                    <Layers className="w-3 h-3 text-amber-500" />
-                                    <span>Grouped Visuals ({imagesList.length})</span>
-                                  </span>
-                                  <span className="text-[10px] font-bold text-[#808897] truncate max-w-[130px]">
-                                    {currentImg.title || `Photo #${activeIdx + 1}`}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                                  {imagesList.map((img, i) => (
-                                    <button
-                                      key={img.id || i}
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setActiveImageIndices((prev) => ({ ...prev, [item.id]: i }));
-                                      }}
-                                      className={`relative shrink-0 w-11 h-9 rounded-lg overflow-hidden border transition cursor-pointer select-none ${
-                                        i === activeIdx
-                                          ? 'border-amber-500 ring-2 ring-amber-400 scale-105 shadow-xs'
-                                          : 'border-[#DFE1E6] opacity-70 hover:opacity-100 hover:border-[#808897]'
-                                      }`}
-                                      title={img.title || `Photo #${i + 1}`}
-                                    >
-                                      <img
-                                        src={img.url}
-                                        alt={img.title || `Photo #${i + 1}`}
-                                        style={getImageStyle(img.position)}
-                                        className="w-full h-full object-cover"
-                                      />
-                                      <span className="absolute bottom-0 right-0 px-1 rounded-tl bg-black/80 text-[8px] font-black text-white">
-                                        #{i + 1}
-                                      </span>
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
+                              <span className="pointer-events-auto px-2.5 py-0.5 rounded-full bg-black/50 backdrop-blur-md text-white text-[11px] font-semibold flex items-center gap-1 shadow-xs">
+                                <Layers className="w-3 h-3 text-amber-300" />
+                                <span>{activeIdx + 1}/{imagesList.length}</span>
+                              </span>
                             )}
                           </div>
+
+                          {/* Right: Floating Heart / Like Button */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleHeart(item.id);
+                              if (!hasHearted) {
+                                confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
+                              }
+                            }}
+                            className={`pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all backdrop-blur-md cursor-pointer active:scale-90 shadow-sm ${
+                              hasHearted
+                                ? 'bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/30'
+                                : 'bg-black/45 hover:bg-black/75 text-white'
+                            }`}
+                            title={hasHearted ? 'Liked' : 'Like this idea'}
+                          >
+                            <Heart className={`w-3.5 h-3.5 ${hasHearted ? 'fill-white text-white' : 'fill-none text-white stroke-[2.5]'}`} />
+                            <span>{item.heartCount}</span>
+                          </button>
                         </div>
 
-                        {/* Action Container */}
-                        <div className="p-3 bg-[#F8F9FB] border-t border-[#ECEFF3] space-y-2">
-                          {/* Top Row: Heart Reaction Button + Quick Like Count */}
-                          <div className="flex items-center justify-between gap-2">
+                        {/* CAROUSEL CONTROLS (Multi-image) - Progressively revealed on hover */}
+                        {isMulti && (
+                          <div className="absolute inset-y-0 left-2 right-2 flex items-center justify-between pointer-events-none opacity-0 group-hover/card:opacity-100 transition-opacity duration-200 z-20">
                             <button
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onToggleHeart(item.id);
-                                if (!hasHearted) {
-                                  confetti({ particleCount: 30, spread: 45, origin: { y: 0.85 } });
-                                }
+                                setActiveImageIndices((prev) => ({
+                                  ...prev,
+                                  [item.id]: (activeIdx - 1 + imagesList.length) % imagesList.length,
+                                }));
                               }}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer active:scale-95 ${
-                                hasHearted
-                                  ? 'bg-rose-500 text-white shadow-xs'
-                                  : 'bg-white text-[#353849] border border-[#DFE1E6] hover:bg-rose-50 hover:text-rose-600'
-                              }`}
+                              className="pointer-events-auto w-8 h-8 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center transition shadow-md cursor-pointer hover:scale-110 active:scale-95"
+                              title="Previous photo in group"
                             >
-                              <Heart className={`w-3.5 h-3.5 ${hasHearted ? 'fill-white' : 'fill-none'}`} />
-                              <span>{item.heartCount} {item.heartCount === 1 ? 'like' : 'likes'}</span>
+                              <ChevronLeft className="w-4 h-4" />
                             </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveImageIndices((prev) => ({
+                                  ...prev,
+                                  [item.id]: (activeIdx + 1) % imagesList.length,
+                                }));
+                              }}
+                              className="pointer-events-auto w-8 h-8 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center transition shadow-md cursor-pointer hover:scale-110 active:scale-95"
+                              title="Next photo in group"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
 
-                            {/* Owner / Assistant Admin: Delete Action */}
-                            {canManage && (
-                              <div>
-                                {isDeleting ? (
-                                  <div className="flex items-center gap-1">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onDeleteSuggestion(item.id);
-                                        setDeletingId(null);
-                                      }}
-                                      className="px-2 py-1 rounded-lg bg-rose-600 text-white text-[11px] font-black hover:bg-rose-700 transition cursor-pointer"
-                                    >
-                                      Confirm Delete
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setDeletingId(null);
-                                      }}
-                                      className="px-2 py-1 rounded-lg bg-[#ECEFF3] text-[#353849] text-[11px] font-bold hover:bg-[#DFE1E6] transition cursor-pointer"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setDeletingId(item.id);
-                                    }}
-                                    className="p-1.5 rounded-lg text-[#808897] hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
-                                    title="Delete suggestion (without affecting plan)"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
+                        {/* Multi-photo dot pagination */}
+                        {isMulti && (
+                          <div className="absolute bottom-20 left-0 right-0 flex justify-center gap-1 pointer-events-none z-10 opacity-0 group-hover/card:opacity-100 transition-opacity">
+                            {imagesList.map((_, dotIdx) => (
+                              <span
+                                key={dotIdx}
+                                className={`w-1.5 h-1.5 rounded-full transition-all ${
+                                  dotIdx === activeIdx ? 'bg-white w-3' : 'bg-white/50'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        )}
+
+                        {/* BOTTOM OVERLAY - PROGRESSIVE DISCLOSURE */}
+                        <div className="absolute bottom-0 inset-x-0 p-4 text-white z-10 flex flex-col justify-end">
+                          {/* Resting Glance: Clean Title + Author */}
+                          <div>
+                            <h4 className="text-base sm:text-lg font-bold text-white leading-snug drop-shadow-sm truncate">
+                              {item.title}
+                            </h4>
+                            <div className="flex items-center justify-between text-xs text-white/80 mt-0.5">
+                              <span className="truncate">by {item.authorName}</span>
+                              <span className="text-[10px] font-medium text-white/70 uppercase tracking-wider hidden sm:inline">
+                                #{index + 1}
+                              </span>
+                            </div>
+                            {/* Clickable text link if added */}
+                            {item.link && (
+                              <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                                <a
+                                  href={item.link.startsWith('http://') || item.link.startsWith('https://') ? item.link : `https://${item.link}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs font-bold text-rose-200 hover:text-white underline underline-offset-2 transition-colors cursor-pointer"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <span>View this idea →</span>
+                                </a>
                               </div>
                             )}
                           </div>
 
-                          {/* Owner & Assistant Admin Actions Bar */}
-                          {canManage && (
-                            <div className="pt-2 border-t border-[#ECEFF3] grid grid-cols-2 gap-1.5">
-                              {/* 1. Put Selected Suggestions Up for Vote */}
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onTogglePutUpForVote(item.id);
-                                }}
-                                className={`flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-black transition cursor-pointer ${
-                                  item.isPutUpForVote
-                                    ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
-                                    : 'bg-white border border-[#DFE1E6] text-[#353849] hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200'
-                                }`}
-                                title={item.isPutUpForVote ? 'Click to remove from vote' : 'Put this suggestion up for voting'}
-                              >
-                                <Vote className="w-3.5 h-3.5 shrink-0" />
-                                <span className="truncate">
-                                  {item.isPutUpForVote ? 'In Voting Poll ✓' : 'Put Up for Vote'}
-                                </span>
-                              </button>
+                          {/* Hover Revealed: Description preview + Quick Actions */}
+                          <div className="max-h-0 opacity-0 group-hover/card:max-h-40 group-hover/card:opacity-100 transition-all duration-300 overflow-hidden">
+                            {item.description && (
+                              <p className="text-xs text-white/90 line-clamp-2 mt-2 font-normal leading-relaxed">
+                                {item.description}
+                              </p>
+                            )}
 
-                              {/* 2. Use Suggestion to Replace Existing Selection (Does NOT lock plan) - Reversible via Undo */}
+                            {/* Action Row */}
+                            <div className="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-white/20">
+                              <span className="text-[11px] font-semibold text-white/90 flex items-center gap-1">
+                                <Maximize2 className="w-3 h-3" />
+                                <span>Click to expand</span>
+                              </span>
+
+                              {/* Management icons for Owner / Admin */}
+                              {canManage && (
+                                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                  {/* Reposition Photo */}
+                                  {onUpdateSuggestionPosition && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setRepositioningSug(item);
+                                        setRepositionImageIndex(activeIdx);
+                                        setTempPosition(currentImg.position || item.imagePosition || { ...DEFAULT_IMAGE_POSITION });
+                                      }}
+                                      className="p-1.5 rounded-full bg-black/50 hover:bg-black/80 text-white transition cursor-pointer"
+                                      title="Adjust photo crop and position"
+                                    >
+                                      <Move className="w-3 h-3" />
+                                    </button>
+                                  )}
+
+                                  {/* Toggle Put Up For Vote */}
+                                  <button
+                                    type="button"
+                                    onClick={() => onTogglePutUpForVote(item.id)}
+                                    className={`p-1.5 rounded-full transition cursor-pointer ${
+                                      item.isPutUpForVote
+                                        ? 'bg-indigo-600 text-white shadow-sm'
+                                        : 'bg-black/50 hover:bg-indigo-600 text-white'
+                                    }`}
+                                    title={item.isPutUpForVote ? 'Remove from voting poll' : 'Put this idea up for vote'}
+                                  >
+                                    <Vote className="w-3 h-3" />
+                                  </button>
+
+                                  {/* Select as Plan Winner */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onSelectAsWinner(item.id);
+                                      if (!item.isSelectedWinner) {
+                                        confetti({ particleCount: 40, spread: 50, origin: { y: 0.7 } });
+                                      }
+                                    }}
+                                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                                      item.isSelectedWinner
+                                        ? 'bg-rose-600 text-white hover:bg-rose-700'
+                                        : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
+                                    }`}
+                                    title={item.isSelectedWinner ? 'Undo plan selection' : 'Use this idea as plan selection'}
+                                  >
+                                    <Check className="w-3 h-3 stroke-[3]" />
+                                    <span>{item.isSelectedWinner ? 'Undo' : 'Select'}</span>
+                                  </button>
+
+                                  {/* Delete Suggestion */}
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeletingId(item.id)}
+                                    className="p-1.5 rounded-full bg-black/50 hover:bg-rose-600 text-white transition cursor-pointer"
+                                    title="Delete idea"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* In-Card Delete Confirmation Overlay */}
+                        {deletingId === item.id && (
+                          <div
+                            className="absolute inset-0 bg-black/85 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center z-30 animate-in fade-in"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Trash2 className="w-8 h-8 text-rose-500 mb-2 animate-bounce" />
+                            <p className="text-xs font-bold text-white mb-3">Delete this visual idea?</p>
+                            <div className="flex items-center gap-2">
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onSelectAsWinner(item.id);
-                                  if (!item.isSelectedWinner) {
-                                    confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
-                                  }
+                                type="button"
+                                onClick={() => {
+                                  onDeleteSuggestion(item.id);
+                                  setDeletingId(null);
                                 }}
-                                className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-black transition cursor-pointer active:scale-98 ${
-                                  item.isSelectedWinner
-                                    ? 'bg-emerald-700 hover:bg-rose-600 text-white shadow-xs'
-                                    : 'bg-[#1A1B25] text-white hover:bg-emerald-600 shadow-xs'
-                                }`}
-                                title={
-                                  item.isSelectedWinner
-                                    ? "Click to undo / revert this selection and restore previous plan value"
-                                    : "Set as current selection for this plan (plan remains fully editable)"
-                                }
+                                className="px-3.5 py-1.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition cursor-pointer shadow-sm"
                               >
-                                {item.isSelectedWinner ? (
-                                  <>
-                                    <RotateCcw className="w-3.5 h-3.5 shrink-0" />
-                                    <span className="truncate">Undo Selection</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Check className="w-3.5 h-3.5 shrink-0" />
-                                    <span className="truncate">Use Suggestion</span>
-                                  </>
-                                )}
+                                Confirm Delete
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingId(null)}
+                                className="px-3.5 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition cursor-pointer"
+                              >
+                                Cancel
                               </button>
                             </div>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
               )}
-            </div>
-          );
-        })}
-      </div>
 
       {/* Reposition Suggestion Image Modal */}
       {repositioningSug && (() => {
@@ -753,121 +675,127 @@ export const SuggestionsSection: React.FC<SuggestionsSectionProps> = ({
         );
       })()}
 
-      {/* Visual Suggestion — Full Image Preview Modal */}
+      {/* Visual Suggestion — Full Image Preview Modal (Redesigned strictly to match Image 1 and Image 2) */}
       {previewSug && (() => {
-        const previewImages = previewSug.images && previewSug.images.length > 0
-          ? previewSug.images
+        // Sync with active suggestion state from parent suggestions list
+        const activeSug = suggestions.find((s) => s.id === previewSug.id) || previewSug;
+        const previewImages = activeSug.images && activeSug.images.length > 0
+          ? activeSug.images
           : [
               {
                 id: 'img-main',
-                url: previewSug.imageUrl,
-                title: previewSug.title,
-                position: previewSug.imagePosition,
+                url: activeSug.imageUrl,
+                title: activeSug.title,
+                position: activeSug.imagePosition,
               },
             ];
         const activeIdx = Math.min(Math.max(0, previewActiveIndex), previewImages.length - 1);
         const currentImg = previewImages[activeIdx] || previewImages[0];
         const isMulti = previewImages.length > 1;
+        const hasHearted = activeSug.heartedByMemberIds.includes(currentPersona.id);
+        const isAuthor = activeSug.authorId === currentPersona.id || activeSug.authorName.toLowerCase() === currentPersona.name.toLowerCase();
+        const canDelete = canManage || isAuthor;
+
+        const formattedUrl = activeSug.link
+          ? activeSug.link.startsWith('http://') || activeSug.link.startsWith('https://')
+            ? activeSug.link
+            : `https://${activeSug.link}`
+          : '';
+
+        // Dynamic Plan Icon and Title associated strictly with the selected Plan
+        const cleanTitle = (val?: string) => {
+          if (!val) return '';
+          return val.replace(/^[\p{Emoji}\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '').trim();
+        };
+
+        const selectedPlan =
+          plans.find((p) => p.id === selectedPlanFilter) ||
+          plans.find((p) => p.id === activeSug.planId) ||
+          plans.find((p) => p.title.toLowerCase() === activeSug.planTitle?.toLowerCase()) ||
+          plans.find((p) => p.title.toLowerCase() === cleanTitle(activeSug.category).toLowerCase()) ||
+          plans[0];
+
+        const displayPlanIcon = selectedPlan?.emoji || activeSug.planEmoji || '';
+        const displayPlanTitle = selectedPlan?.title || cleanTitle(activeSug.planTitle || activeSug.category) || 'Plan';
 
         return (
-          <div
-            id="suggestion-full-image-preview-modal"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setPreviewSug(null);
-              }
-            }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
-          >
-            <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-[#DFE1E6] overflow-hidden animate-in zoom-in-95 duration-150">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-[#ECEFF3] bg-white shrink-0">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="p-2 rounded-xl bg-amber-50 text-amber-600 shrink-0">
-                    <Maximize2 className="w-5 h-5" />
-                  </div>
+          <>
+            <div
+              id="suggestion-full-image-preview-modal"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setPreviewSug(null);
+                }
+              }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+            >
+              <div
+                className="bg-white rounded-3xl max-w-md sm:max-w-lg w-full max-h-[92vh] flex flex-col shadow-2xl border border-[#DFE1E6] overflow-y-auto animate-in zoom-in-95 duration-150 scrollbar-none"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* 1. Modal Header (Exact match to Image 1 & 2 — Sticky to Top) */}
+                <div className="sticky top-0 z-30 flex items-start justify-between gap-4 px-5 sm:px-6 pt-5 pb-3 bg-white shrink-0">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-[#666D80] bg-[#ECEFF3] px-2 py-0.5 rounded-md truncate max-w-[200px]">
-                        {previewSug.category}
-                      </span>
-                      {isMulti && (
-                        <span className="text-[10px] font-black bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md flex items-center gap-1">
-                          <Layers className="w-3 h-3" />
-                          <span>{previewImages.length} Photos</span>
-                        </span>
-                      )}
-                      {previewSug.isSelectedWinner && (
-                        <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>Current Selection</span>
+                      <h3 className="text-xl sm:text-2xl font-bold text-[#1A1B25] tracking-tight truncate">
+                        {activeSug.title}
+                      </h3>
+                      {activeSug.isSelectedWinner && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#00BFA6] text-white shrink-0">
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          <span>Selected</span>
                         </span>
                       )}
                     </div>
-                    <h3 className="text-base sm:text-lg font-black text-[#1A1B25] truncate mt-0.5">
-                      {previewSug.title}
-                    </h3>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#ECEFF3] text-[#666D80] mt-1.5">
+                      {displayPlanIcon && (
+                        <span className="text-xs leading-none select-none">
+                          {displayPlanIcon}
+                        </span>
+                      )}
+                      <span>{displayPlanTitle}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 shrink-0 pt-1">
+                    {/* Delete action (Only visible if authorized to delete) */}
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="text-[#808897] hover:text-[#1A1B25] transition cursor-pointer p-0.5"
+                        title="Delete this idea"
+                        aria-label="Delete this idea"
+                      >
+                        <Trash2 className="w-5 h-5 stroke-[1.6]" />
+                      </button>
+                    )}
+
+                    {/* Close action */}
+                    <button
+                      type="button"
+                      onClick={() => setPreviewSug(null)}
+                      className="text-[#808897] hover:text-[#1A1B25] transition cursor-pointer p-0.5"
+                      title="Close"
+                      aria-label="Close"
+                    >
+                      <X className="w-5 h-5 stroke-[2]" />
+                    </button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  {/* If multi-image, toggle between Single Focus & All Photos Grid */}
-                  {isMulti && (
-                    <div className="flex items-center bg-[#ECEFF3] p-0.5 rounded-xl text-xs font-bold">
-                      <button
-                        type="button"
-                        onClick={() => setPreviewViewMode('focus')}
-                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg transition cursor-pointer select-none ${
-                          previewViewMode === 'focus'
-                            ? 'bg-white text-[#1A1B25] shadow-xs font-black'
-                            : 'text-[#666D80] hover:text-[#1A1B25]'
-                        }`}
-                        title="Focus viewer with carousel"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Focus</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPreviewViewMode('grid')}
-                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg transition cursor-pointer select-none ${
-                          previewViewMode === 'grid'
-                            ? 'bg-white text-[#1A1B25] shadow-xs font-black'
-                            : 'text-[#666D80] hover:text-[#1A1B25]'
-                        }`}
-                        title="View all photos together side by side"
-                      >
-                        <GridIcon className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">All Photos</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Close button */}
-                  <button
-                    type="button"
-                    onClick={() => setPreviewSug(null)}
-                    className="p-2 rounded-xl text-[#808897] hover:bg-[#F6F8FA] hover:text-[#1A1B25] transition cursor-pointer"
-                    title="Close preview (Esc)"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Modal Body / Image Viewers */}
-              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-[#F8F9FB]">
-                {previewViewMode === 'focus' || !isMulti ? (
-                  <div className="space-y-3">
-                    {/* Large Main Viewport Stage */}
-                    <div className="relative w-full h-[46vh] sm:h-[54vh] bg-[#1A1B25] rounded-2xl overflow-hidden flex items-center justify-center select-none shadow-inner group">
+                {/* 2. Modal Body */}
+                <div className="px-5 sm:px-6 pb-6 space-y-4">
+                  {/* Image Viewport (Sticky to Top of Modal — Content Scrolls Seamlessly Underneath) */}
+                  <div className="sticky top-[72px] sm:top-[76px] z-20 -mx-5 sm:-mx-6 px-5 sm:px-6 bg-white pb-3 pt-0.5 -mt-0.5">
+                    <div className="w-full h-[280px] sm:h-[320px] shrink-0 rounded-2xl sm:rounded-3xl bg-[#ECEFF3] overflow-hidden relative flex items-center justify-center select-none shadow-2xs">
                       <img
                         src={currentImg.url}
-                        alt={currentImg.title || previewSug.title}
-                        className="max-h-full max-w-full w-auto h-auto object-contain transition-transform duration-300"
+                        alt={currentImg.title || activeSug.title}
+                        className="w-full h-full object-contain rounded-none"
                       />
 
-                      {/* Multi-image Prev/Next controls */}
+                      {/* Carousel navigation arrows */}
                       {isMulti && (
                         <>
                           <button
@@ -876,10 +804,11 @@ export const SuggestionsSection: React.FC<SuggestionsSectionProps> = ({
                               e.stopPropagation();
                               setPreviewActiveIndex((activeIdx - 1 + previewImages.length) % previewImages.length);
                             }}
-                            className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center transition cursor-pointer shadow-lg active:scale-90"
-                            title="Previous photo (Left Arrow)"
+                            className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-black/45 hover:bg-black/65 text-white flex items-center justify-center transition cursor-pointer shadow active:scale-95 z-10"
+                            title="Previous photo"
+                            aria-label="Previous photo"
                           >
-                            <ChevronLeft className="w-6 h-6" />
+                            <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
                           </button>
                           <button
                             type="button"
@@ -887,160 +816,184 @@ export const SuggestionsSection: React.FC<SuggestionsSectionProps> = ({
                               e.stopPropagation();
                               setPreviewActiveIndex((activeIdx + 1) % previewImages.length);
                             }}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center transition cursor-pointer shadow-lg active:scale-90"
-                            title="Next photo (Right Arrow)"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-black/45 hover:bg-black/65 text-white flex items-center justify-center transition cursor-pointer shadow active:scale-95 z-10"
+                            title="Next photo"
+                            aria-label="Next photo"
                           >
-                            <ChevronRight className="w-6 h-6" />
+                            <ChevronRight className="w-5 h-5 stroke-[2.5]" />
                           </button>
-
-                          {/* Image index counter badge */}
-                          <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md text-white text-xs font-black">
-                            Photo {activeIdx + 1} of {previewImages.length}
-                          </div>
                         </>
                       )}
 
-                      {/* Photo caption / title */}
-                      <div className="absolute bottom-3 inset-x-3 flex items-center justify-between text-white pointer-events-none">
-                        <span className="px-3 py-1 rounded-full bg-black/70 backdrop-blur-md text-xs font-bold max-w-md truncate">
-                          {currentImg.title || `Photo #${activeIdx + 1}`}
-                        </span>
-                        <span className="px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md text-[11px] font-bold text-white/80">
-                          Full View
-                        </span>
+                      {/* Counter Badge in bottom-right (e.g. 1/2) */}
+                      <div className="absolute bottom-3 right-3 px-2.5 py-0.5 rounded-full bg-[#808897]/80 backdrop-blur-xs text-white text-xs font-bold select-none z-10">
+                        {activeIdx + 1}/{previewImages.length}
                       </div>
                     </div>
+                  </div>
 
-                    {/* All Photos Shown Together in Multi-Image Gallery Strip */}
-                    {isMulti && (
-                      <div className="bg-white p-3.5 rounded-2xl border border-[#ECEFF3] space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-[#1A1B25] flex items-center gap-1.5">
-                            <Layers className="w-3.5 h-3.5 text-amber-500" />
-                            <span>All {previewImages.length} Photos in this Suggestion</span>
-                          </span>
-                          <span className="text-[11px] font-medium text-[#666D80]">
-                            Click any photo to view in full size
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 pt-1">
-                          {previewImages.map((img, i) => (
-                            <button
-                              key={img.id || i}
-                              type="button"
-                              onClick={() => setPreviewActiveIndex(i)}
-                              className={`relative rounded-xl overflow-hidden aspect-video border-2 transition cursor-pointer select-none group/thumb ${
-                                i === activeIdx
-                                  ? 'border-amber-500 ring-2 ring-amber-400 scale-[1.02] shadow-xs'
-                                  : 'border-[#DFE1E6] opacity-75 hover:opacity-100 hover:border-[#808897]'
-                              }`}
-                            >
-                              <img
-                                src={img.url}
-                                alt={img.title || `Photo ${i + 1}`}
-                                className="w-full h-full object-cover"
-                              />
-                              <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/75 text-[9px] font-black text-white">
-                                #{i + 1}
-                              </span>
-                              {img.title && (
-                                <span className="absolute bottom-0 inset-x-0 bg-black/70 text-[9px] font-bold text-white px-1 py-0.5 truncate text-left">
-                                  {img.title}
-                                </span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
+                  {/* 3. Action Buttons (Owner/Admin Only — State 1: Initial vs State 2: Actioned) */}
+                  {canManage && (
+                    <div className="flex items-center gap-3">
+                      {/* Put for Vote button (Maintains exact default size; disabled if Selected) */}
+                      <button
+                        type="button"
+                        disabled={activeSug.isSelectedWinner}
+                        onClick={() => {
+                          if (!activeSug.isSelectedWinner) {
+                            onTogglePutUpForVote(activeSug.id);
+                          }
+                        }}
+                        className={`flex-1 py-3 sm:py-3.5 px-4 rounded-full text-sm sm:text-[15px] font-bold transition flex items-center justify-center ${
+                          activeSug.isSelectedWinner
+                            ? 'bg-[#ECEFF3] text-[#1A1B25] opacity-50 cursor-not-allowed'
+                            : activeSug.isPutUpForVote
+                            ? 'bg-[#1A1B25] text-white shadow-xs cursor-pointer active:scale-98'
+                            : 'bg-[#ECEFF3] hover:bg-[#DFE1E6] text-[#1A1B25] cursor-pointer active:scale-98'
+                        }`}
+                      >
+                        {activeSug.isPutUpForVote && !activeSug.isSelectedWinner ? 'In Voting ✓' : 'Put for Vote'}
+                      </button>
+
+                      {/* Select / Undo Select button (Maintains exact default size, style, and typography) */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSelectAsWinner(activeSug.id);
+                          if (!activeSug.isSelectedWinner) {
+                            confetti({ particleCount: 35, spread: 50, origin: { y: 0.7 } });
+                          }
+                        }}
+                        className="flex-1 py-3 sm:py-3.5 px-4 rounded-full text-sm sm:text-[15px] font-bold transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 bg-[#ECEFF3] hover:bg-[#DFE1E6] text-[#1A1B25]"
+                      >
+                        {activeSug.isSelectedWinner ? (
+                          <>
+                            <RotateCcw className="w-4 h-4 stroke-[2.2]" />
+                            <span>Undo Select</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-4 h-4 text-[#0D9488] stroke-[3]" />
+                            <span>Select</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Regular Member Status Indicator if selected */}
+                  {!canManage && activeSug.isSelectedWinner && (
+                    <div className="py-2.5 px-4 rounded-full bg-emerald-50 text-emerald-800 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 border border-emerald-200">
+                      <Check className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
+                      <span>Selected Decision Choice</span>
+                    </div>
+                  )}
+
+                  {/* 4. Card 1: Suggested by, Hearts & Description */}
+                  <div className="p-4 sm:p-5 rounded-2xl border border-[#ECEFF3] bg-white shadow-2xs space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm sm:text-[15px]">
+                        <span className="text-[#808897] font-normal">Suggested: </span>
+                        <span className="font-bold text-[#1A1B25]">{activeSug.authorName}</span>
                       </div>
+
+                      {/* Interactive Heart Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onToggleHeart(activeSug.id);
+                          if (!hasHearted) {
+                            confetti({ particleCount: 30, spread: 45, origin: { y: 0.8 } });
+                          }
+                        }}
+                        className="flex items-center gap-1.5 text-sm sm:text-[15px] font-bold text-[#1A1B25] hover:text-rose-600 transition cursor-pointer select-none"
+                        title="Like this idea"
+                        aria-label="Like this idea"
+                      >
+                        <Heart
+                          className={`w-5 h-5 stroke-[1.8] transition-colors ${
+                            hasHearted ? 'fill-rose-500 text-rose-500' : 'text-[#1A1B25]'
+                          }`}
+                        />
+                        <span>{activeSug.heartCount} hearts</span>
+                      </button>
+                    </div>
+
+                    {activeSug.description && (
+                      <p className="text-sm sm:text-[14px] text-[#808897] leading-relaxed font-normal">
+                        {activeSug.description}
+                      </p>
                     )}
                   </div>
-                ) : (
-                  /* Grid View: All Photos Displayed Together */
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between bg-white px-3.5 py-2.5 rounded-2xl border border-[#ECEFF3]">
-                      <span className="text-xs font-black text-[#1A1B25] flex items-center gap-1.5">
-                        <GridIcon className="w-3.5 h-3.5 text-amber-500" />
-                        <span>All {previewImages.length} Images Shown Together</span>
-                      </span>
-                      <span className="text-[11px] text-[#666D80] font-medium">
-                        Click any image to enlarge in focus viewer
-                      </span>
-                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                      {previewImages.map((img, i) => (
-                        <div
-                          key={img.id || i}
-                          onClick={() => {
-                            setPreviewActiveIndex(i);
-                            setPreviewViewMode('focus');
-                          }}
-                          className="bg-white rounded-2xl overflow-hidden border border-[#ECEFF3] hover:border-[#DFE1E6] shadow-xs cursor-pointer group transition hover:shadow-md"
+                  {/* 5. Card 2: Link */}
+                  {activeSug.link && (
+                    <div className="p-4 sm:p-5 rounded-2xl border border-[#ECEFF3] bg-white shadow-2xs space-y-1">
+                      <div className="text-sm sm:text-[15px]">
+                        <span className="text-[#808897] font-normal">Link: </span>
+                        <a
+                          href={formattedUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-bold text-[#1A1B25] underline underline-offset-2 hover:text-black transition-colors cursor-pointer"
                         >
-                          <div className="relative h-56 w-full bg-[#1A1B25] flex items-center justify-center p-1">
-                            <img
-                              src={img.url}
-                              alt={img.title || `Photo #${i + 1}`}
-                              className="max-h-full max-w-full object-contain"
-                            />
-                            <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/70 text-white text-[10px] font-black">
-                              Photo #{i + 1}
-                            </div>
-                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-black/30">
-                              <span className="px-3 py-1.5 rounded-xl bg-white text-[#1A1B25] text-xs font-black shadow-lg flex items-center gap-1.5">
-                                <Maximize2 className="w-3.5 h-3.5" />
-                                <span>Enlarge</span>
-                              </span>
-                            </div>
-                          </div>
-                          {img.title && (
-                            <div className="p-3 bg-white border-t border-[#ECEFF3]">
-                              <h5 className="text-xs font-bold text-[#1A1B25] truncate">
-                                {img.title}
-                              </h5>
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                          {activeSug.linkTitle || 'View this idea'}
+                        </a>
+                      </div>
+                      <p className="text-sm text-[#808897] truncate">
+                        {activeSug.link}
+                      </p>
                     </div>
-                  </div>
-                )}
-
-                {/* Suggestion Description & Details Box */}
-                <div className="bg-white p-4 rounded-2xl border border-[#ECEFF3] space-y-2">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <span className="text-xs font-bold text-[#666D80]">
-                      Suggested by <span className="font-black text-[#1A1B25]">{previewSug.authorName}</span>
-                    </span>
-                    <span className="text-xs font-black text-rose-500 bg-rose-50 px-2.5 py-1 rounded-full">
-                      {previewSug.heartCount} {previewSug.heartCount === 1 ? 'Heart' : 'Hearts'} ❤️
-                    </span>
-                  </div>
-                  {previewSug.description && (
-                    <p className="text-xs sm:text-sm text-[#353849] leading-relaxed">
-                      {previewSug.description}
-                    </p>
                   )}
                 </div>
               </div>
+            </div>
 
-              {/* Modal Footer */}
-              <div className="flex items-center justify-between px-5 py-3.5 border-t border-[#ECEFF3] bg-white shrink-0">
-                <span className="text-xs font-medium text-[#808897]">
-                  Press <kbd className="px-1.5 py-0.5 rounded bg-[#ECEFF3] font-mono text-[10px] text-[#353849]">Esc</kbd> or click outside to exit
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewSug(null)}
-                    className="px-5 py-2 rounded-xl text-xs font-bold text-[#353849] bg-[#ECEFF3] hover:bg-[#DFE1E6] transition cursor-pointer select-none"
-                  >
-                    Close Preview
-                  </button>
+            {/* 6. Delete Confirmation Popup Dialog */}
+            {showDeleteConfirm && (
+              <div
+                className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                <div
+                  className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#DFE1E6] animate-in zoom-in-95 duration-150 space-y-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+                    <Trash2 className="w-6 h-6 stroke-[1.8]" />
+                  </div>
+                  <div className="text-center space-y-1.5">
+                    <h4 className="text-lg font-extrabold text-[#1A1B25]">
+                      Delete visual suggestion?
+                    </h4>
+                    <p className="text-xs sm:text-sm text-[#808897] leading-normal">
+                      Are you sure you want to delete &ldquo;{activeSug.title}&rdquo;? This action cannot be undone.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="py-2.5 px-4 rounded-full border border-[#DFE1E6] bg-white hover:bg-[#F6F8FA] text-sm font-bold text-[#666D80] transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onDeleteSuggestion(activeSug.id);
+                        setShowDeleteConfirm(false);
+                        setPreviewSug(null);
+                      }}
+                      className="py-2.5 px-4 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold transition shadow-xs cursor-pointer active:scale-98"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            )}
+          </>
         );
       })()}
     </section>

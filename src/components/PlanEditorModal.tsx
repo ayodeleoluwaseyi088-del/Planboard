@@ -97,9 +97,9 @@ export const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-[#ECEFF3] animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+      <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#ECEFF3] flex items-center justify-between shrink-0">
+        <div className="px-6 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-lg font-bold shadow-xs">
               {emoji}
@@ -109,7 +109,7 @@ export const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
                 <h3 className="text-base font-extrabold text-[#1A1B25]">
                   {isEditing ? 'Edit Attached Plan' : 'Add New Plan to Board'}
                 </h3>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 text-[10px] font-black border border-amber-200">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 text-[10px] font-black">
                   <Crown className="w-2.5 h-2.5 text-amber-600" />
                   Owner Action
                 </span>
@@ -132,7 +132,7 @@ export const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
         {/* Content Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
           {!isOwner && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 font-semibold">
+            <div className="p-3 bg-rose-50 rounded-2xl text-xs text-rose-800 font-semibold">
               🔒 Only the board owner has permission to manage plans. You can view this plan's details, but cannot save edits.
             </div>
           )}
@@ -147,7 +147,7 @@ export const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
                 value={emoji}
                 onChange={(e) => setEmoji(e.target.value)}
                 disabled={!isOwner}
-                className="px-3 py-2.5 rounded-2xl bg-[#F8F9FB] border border-[#DFE1E6] text-lg cursor-pointer disabled:opacity-50"
+                className="px-3 py-2.5 rounded-2xl bg-[#F8F9FB] outline-none text-lg cursor-pointer disabled:opacity-50"
               >
                 {EMOJI_OPTIONS.map((em) => (
                   <option key={em} value={em}>
@@ -161,7 +161,7 @@ export const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Beach Day & Private Cabana or Sunset Afterparty"
                 disabled={!isOwner}
-                className="w-full px-4 py-2.5 rounded-2xl bg-[#F8F9FB] border border-[#DFE1E6] text-sm font-bold text-[#1A1B25] focus:outline-amber-500 focus:bg-white disabled:opacity-50"
+                className="w-full px-4 py-2.5 rounded-2xl bg-[#F8F9FB] outline-none text-sm font-bold text-[#1A1B25] focus:bg-white disabled:opacity-50"
                 required
               />
             </div>
@@ -177,7 +177,7 @@ export const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 disabled={!isOwner}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F8F9FB] border border-[#DFE1E6] text-xs font-bold text-[#1A1B25] focus:outline-amber-500 disabled:opacity-50 cursor-pointer"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F8F9FB] outline-none text-xs font-bold text-[#1A1B25] disabled:opacity-50 cursor-pointer"
               >
                 {CATEGORY_OPTIONS.map((cat) => (
                   <option key={cat} value={cat}>
@@ -195,7 +195,7 @@ export const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
                 value={status}
                 onChange={(e) => setStatus(e.target.value as PlanStatus)}
                 disabled={!isOwner}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F8F9FB] border border-[#DFE1E6] text-xs font-bold text-[#1A1B25] focus:outline-amber-500 disabled:opacity-50 cursor-pointer"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F8F9FB] outline-none text-xs font-bold text-[#1A1B25] disabled:opacity-50 cursor-pointer"
               >
                 <option value="active">Active (Planning)</option>
                 <option value="confirmed">Confirmed (Locked In)</option>
@@ -217,7 +217,7 @@ export const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
                 onChange={(e) => setDate(e.target.value)}
                 placeholder="e.g. Saturday, Sept 19"
                 disabled={!isOwner}
-                className="w-full px-3.5 py-2 rounded-xl bg-[#F8F9FB] border border-[#DFE1E6] text-xs font-semibold text-[#1A1B25] focus:outline-amber-500 disabled:opacity-50"
+                className="w-full px-3.5 py-2 rounded-xl bg-[#F8F9FB] outline-none text-xs font-semibold text-[#1A1B25] disabled:opacity-50"
               />
             </div>
             <div>
@@ -230,7 +230,7 @@ export const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
                 onChange={(e) => setTime(e.target.value)}
                 placeholder="e.g. 12:00 PM - 06:00 PM"
                 disabled={!isOwner}
-                className="w-full px-3.5 py-2 rounded-xl bg-[#F8F9FB] border border-[#DFE1E6] text-xs font-semibold text-[#1A1B25] focus:outline-amber-500 disabled:opacity-50"
+                className="w-full px-3.5 py-2 rounded-xl bg-[#F8F9FB] outline-none text-xs font-semibold text-[#1A1B25] disabled:opacity-50"
               />
             </div>
           </div>
@@ -247,7 +247,7 @@ export const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder="e.g. Landmark Beach Cabana #4"
                 disabled={!isOwner}
-                className="w-full px-3.5 py-2 rounded-xl bg-[#F8F9FB] border border-[#DFE1E6] text-xs font-semibold text-[#1A1B25] focus:outline-amber-500 disabled:opacity-50"
+                className="w-full px-3.5 py-2 rounded-xl bg-[#F8F9FB] outline-none text-xs font-semibold text-[#1A1B25] disabled:opacity-50"
               />
             </div>
             <div>
@@ -260,7 +260,7 @@ export const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
                 onChange={(e) => setEstimatedCost(e.target.value)}
                 placeholder="e.g. ₦8,500 / person or Free"
                 disabled={!isOwner}
-                className="w-full px-3.5 py-2 rounded-xl bg-[#F8F9FB] border border-[#DFE1E6] text-xs font-semibold text-[#1A1B25] focus:outline-amber-500 disabled:opacity-50"
+                className="w-full px-3.5 py-2 rounded-xl bg-[#F8F9FB] outline-none text-xs font-semibold text-[#1A1B25] disabled:opacity-50"
               />
             </div>
           </div>
@@ -276,7 +276,7 @@ export const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="What makes this plan special? What are the key details and expectations?"
               disabled={!isOwner}
-              className="w-full px-3.5 py-2 rounded-xl bg-[#F8F9FB] border border-[#DFE1E6] text-xs font-medium text-[#1A1B25] focus:outline-amber-500 disabled:opacity-50"
+              className="w-full px-3.5 py-2 rounded-xl bg-[#F8F9FB] outline-none text-xs font-medium text-[#1A1B25] disabled:opacity-50"
             />
           </div>
 
@@ -297,11 +297,11 @@ export const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
           </div>
 
           {/* Footer actions */}
-          <div className="pt-3 border-t border-[#ECEFF3] flex items-center justify-end gap-2.5">
+          <div className="pt-3 flex items-center justify-end gap-2.5">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-[#DFE1E6] hover:bg-[#F6F8FA] text-xs font-bold text-[#353849] transition cursor-pointer"
+              className="px-4 py-2.5 rounded-xl bg-[#F6F8FA] hover:bg-[#ECEFF3] text-xs font-bold text-[#353849] transition cursor-pointer"
             >
               Cancel
             </button>

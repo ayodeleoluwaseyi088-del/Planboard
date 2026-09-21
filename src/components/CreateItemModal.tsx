@@ -12,6 +12,7 @@ import {
 import { ItemType, ItemPriority, UserPersona, AttachedPlan, ImagePosition } from '../types';
 import { ImagePickerField } from './ImagePickerField';
 import { DEFAULT_IMAGE_POSITION } from '../utils/imagePosition';
+import { CornerCheckBadge } from './SelectionBadge';
 
 interface CreateItemModalProps {
   isOpen: boolean;
@@ -152,25 +153,29 @@ export const CreateItemModal: React.FC<CreateItemModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
       <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-[#ECEFF3] animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#ECEFF3] flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-extrabold text-[#1A1B25]">
-              Add to Plan Board
-            </h3>
-            <p className="text-xs text-[#666D80]">
-              Decisions, visual ideas, duties, or fixed ground rules
-            </p>
+        <div className="shrink-0 px-6 py-4.5 border-b border-[#ECEFF3] flex items-center justify-between bg-white sticky top-0 z-20">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">🍹</span>
+            <div>
+              <h3 className="text-base font-extrabold text-[#1A1B25]">
+                Add to Plan Board
+              </h3>
+              <p className="text-xs text-[#666D80]">
+                Decisions, visual ideas, duties, or fixed ground rules
+              </p>
+            </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-[#F6F8FA] text-[#808897] hover:text-[#1A1B25] transition cursor-pointer"
+            className="w-9 h-9 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] text-[#808897] hover:text-[#1A1B25] flex items-center justify-center transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Scrollable Form Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
+        <form id="create-item-form" onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1 bg-white pb-8">
           {/* Type Selector Tabs */}
           <div>
             <label className="block text-xs font-black uppercase tracking-wider text-[#666D80] mb-2">
@@ -190,13 +195,14 @@ export const CreateItemModal: React.FC<CreateItemModalProps> = ({
                     key={item.type}
                     type="button"
                     onClick={() => setItemType(item.type as ItemType)}
-                    className={`p-2.5 rounded-2xl border text-center flex flex-col items-center gap-1 transition cursor-pointer ${
+                    className={`relative p-2.5 rounded-2xl border-2 text-center flex flex-col items-center gap-1 transition cursor-pointer select-none ${
                       isSelected
-                        ? 'bg-amber-50 border-amber-400 text-amber-950 ring-1 ring-amber-400'
-                        : 'bg-[#F8F9FB] border-[#DFE1E6] text-[#353849] hover:bg-[#ECEFF3]'
+                        ? 'border-[#EFA00E] bg-[#FFF9F0] text-[#1A1B25] shadow-2xs'
+                        : 'border-[#ECEFF3] bg-[#F8F9FB] text-[#353849] hover:bg-[#F6F8FA] hover:border-[#DFE1E6]'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 ${item.color}`} />
+                    {isSelected && <CornerCheckBadge size="sm" />}
+                    <Icon className={`w-4 h-4 ${isSelected ? 'text-[#EFA00E]' : item.color}`} />
                     <span className="text-xs font-extrabold">{item.label}</span>
                   </button>
                 );
@@ -413,16 +419,18 @@ export const CreateItemModal: React.FC<CreateItemModalProps> = ({
               ))}
             </div>
           </div>
-
-          <div className="pt-2">
-            <button
-              type="submit"
-              className="w-full py-3 px-4 rounded-2xl bg-[#1A1B25] hover:bg-[#272835] text-white font-extrabold text-sm transition cursor-pointer shadow-md active:scale-98"
-            >
-              Add Item to Board
-            </button>
-          </div>
         </form>
+
+        {/* Fixed / Sticky Bottom CTA Footer */}
+        <div className="shrink-0 sticky bottom-0 z-20 bg-[#F8F9FB] border-t border-[#ECEFF3] p-5 sm:p-6 rounded-b-3xl">
+          <button
+            type="submit"
+            form="create-item-form"
+            className="w-full py-3.5 sm:py-4 px-6 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white font-extrabold text-sm sm:text-base transition-all cursor-pointer shadow-sm flex items-center justify-center gap-2 active:scale-[0.99]"
+          >
+            Add Item to Board
+          </button>
+        </div>
       </div>
     </div>
   );

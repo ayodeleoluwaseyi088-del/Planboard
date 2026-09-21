@@ -26,6 +26,7 @@ interface BoardHeaderProps {
 
 export const BoardHeader: React.FC<BoardHeaderProps> = ({
   board,
+  currentPersona,
   onOpenPeople,
   onOpenCreateItem,
   onOpenAddPlan,
@@ -35,6 +36,22 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
   const [tempPosition, setTempPosition] = useState<ImagePosition>(
     board.coverImagePosition || { ...DEFAULT_IMAGE_POSITION }
   );
+
+  // Permissions: Add Plan and Cover Image Adjustment are creator/admin-only features
+  // Show these controls only to the Board Creator and Admins.
+  // Hide them completely from regular Members.
+  const boardMember = (board.members || []).find(
+    (m) => m.id === currentPersona?.id || (Boolean(m.name) && Boolean(currentPersona?.name) && m.name.toLowerCase() === currentPersona?.name.toLowerCase())
+  );
+  const resolvedRole = boardMember?.role || currentPersona?.role;
+  const isCreatorOrAdmin = 
+    resolvedRole === 'owner' || 
+    resolvedRole === 'admin' ||
+    (Boolean(board.ownerId) && currentPersona?.id === board.ownerId) ||
+    (Boolean(board.ownerName) && Boolean(currentPersona?.name) && currentPersona?.name.toLowerCase() === board.ownerName.toLowerCase()) ||
+    Boolean(board.members?.some(
+      (m) => (m.id === currentPersona?.id || (Boolean(m.name) && Boolean(currentPersona?.name) && m.name.toLowerCase() === currentPersona?.name.toLowerCase())) && (m.role === 'owner' || m.role === 'admin')
+    ));
 
   // Check if any attached plan specifies a date/time (or fallback to board's explicit plan-synced values)
   const scheduledPlan = (board.plans || []).find((p) => p.isPrimary && (p.date || p.time || p.dateTime))
@@ -134,32 +151,34 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
         {/* Ambient Dark Gradient for Legibility */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/20 pointer-events-none" />
 
-        {/* Top Actions: + Add Plan (Left) and Cover (Right) */}
-        <div className="absolute top-4 sm:top-5 left-4 sm:left-5 right-4 sm:right-5 flex items-center justify-between z-10">
-          {/* Add Plan Button */}
-          <button
-            type="button"
-            onClick={onOpenAddPlan || onOpenCreateItem}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-black hover:bg-black/85 text-white text-xs sm:text-sm font-bold shadow-md transition cursor-pointer active:scale-95"
-          >
-            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-            <span>Add Plan</span>
-          </button>
+        {/* Top Actions: + Add Plan (Left) and Cover (Right) - Shown only to Creator and Admins */}
+        {isCreatorOrAdmin && (
+          <div className="absolute top-4 sm:top-5 left-4 sm:left-5 right-4 sm:right-5 flex items-center justify-between z-10">
+            {/* Add Plan Button */}
+            <button
+              type="button"
+              onClick={onOpenAddPlan || onOpenCreateItem}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-black/80 hover:bg-black text-white text-xs sm:text-sm font-bold backdrop-blur-xs shadow-md transition cursor-pointer active:scale-95"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Add Plan</span>
+            </button>
 
-          {/* Cover Settings Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setTempPosition(board.coverImagePosition || { ...DEFAULT_IMAGE_POSITION });
-              setIsRepositioningCover(true);
-            }}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white hover:bg-white/95 text-[#1A1B25] text-xs sm:text-sm font-bold shadow-md transition cursor-pointer active:scale-95"
-            title="Cover settings"
-          >
-            <Move className="w-3.5 h-3.5 text-[#1A1B25]" />
-            <span>Cover</span>
-          </button>
-        </div>
+            {/* Cover Settings Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setTempPosition(board.coverImagePosition || { ...DEFAULT_IMAGE_POSITION });
+                setIsRepositioningCover(true);
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/90 hover:bg-white text-[#1A1B25] text-xs sm:text-sm font-bold backdrop-blur-xs shadow-md transition cursor-pointer active:scale-95"
+              title="Cover settings"
+            >
+              <Move className="w-3.5 h-3.5 text-[#1A1B25]" />
+              <span>Cover</span>
+            </button>
+          </div>
+        )}
 
         {/* Centered Bottom Hero Content */}
         <div className="absolute bottom-6 sm:bottom-8 left-4 right-4 flex flex-col items-center text-center z-10">
@@ -230,7 +249,7 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
       </div>
 
       {/* Reposition Cover Modal */}
-      {isRepositioningCover && (
+      {isRepositioningCover && isCreatorOrAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
           <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-[#DFE1E6] space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-[#ECEFF3]">

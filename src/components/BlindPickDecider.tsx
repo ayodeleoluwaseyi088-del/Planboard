@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Sparkles, Trophy, CheckCircle2, Users, AlertCircle, RotateCw, RotateCcw } from 'lucide-react';
+import { X, Trophy, Check, RotateCcw, RotateCw } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 import { AttachedPlan } from '../types';
@@ -25,20 +25,24 @@ interface BlindPickDeciderProps {
   onUndoFinalize?: () => void;
 }
 
-const CARD_COLORS = [
-  'from-rose-500 to-red-600',
-  'from-amber-500 to-orange-600',
-  'from-emerald-500 to-teal-600',
-  'from-blue-500 to-indigo-600',
-  'from-purple-500 to-violet-600',
-  'from-pink-500 to-rose-600',
-  'from-cyan-500 to-blue-600',
-  'from-amber-400 to-yellow-600',
+const OPTION_DOT_COLORS = [
+  '#8B5CF6', // Purple (KFC in image)
+  '#3B82F6', // Blue (Chicken Republic in image)
+  '#06B6D4', // Teal/Cyan (Kilimanjaro in image)
+  '#F59E0B', // Amber/Yellow (The Place in image)
+  '#EC4899', // Pink/Coral (Domino's in image)
+  '#10B981', // Emerald
+  '#6366F1', // Indigo
+  '#F97316', // Orange
+  '#14B8A6', // Teal
+  '#EF4444', // Red
 ];
 
 function playCardFlipSound() {
   try {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return;
     const ctx = new AudioContextClass();
     const osc = ctx.createOscillator();
@@ -59,7 +63,9 @@ function playCardFlipSound() {
 
 function playWinFanfare() {
   try {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return;
     const ctx = new AudioContextClass();
     const notes = [440, 554, 659, 880];
@@ -103,23 +109,25 @@ export const BlindPickDecider: React.FC<BlindPickDeciderProps> = ({
   currentUserName = 'Member',
   currentUserAvatar,
   isOwnerOrAdmin = false,
-  totalEligibleMembers = 4,
+  totalEligibleMembers = 20,
   onSaveParticipantSelection,
   onReopenDecision,
   onFinalizeEarly,
   onUndoFinalize,
 }) => {
-  const isFinalized = plan?.status === 'confirmed' && Boolean(plan?.finalDecision);
-  const effectiveTitle = planTitle || plan?.title || 'Group Decision';
-  const effectiveEmoji = planEmoji || plan?.emoji || '🎴';
-  const effectiveQuestion = question || plan?.spinnerQuestion || '';
+  const effectiveTitle = planTitle || plan?.title || 'Food';
+  const effectiveEmoji = planEmoji || plan?.emoji || '🍹';
+  const effectiveQuestion = question || plan?.spinnerQuestion || `What should we choose for ${effectiveTitle}?`;
   const rawOptions = options || plan?.spinnerOptions || [];
 
-  const cleanOptions = Array.isArray(rawOptions) && rawOptions.length >= 2 
+  const cleanOptions = Array.isArray(rawOptions) && rawOptions.length >= 2
     ? rawOptions.filter((o) => typeof o === 'string' && o.trim().length > 0)
-    : ['Option 1', 'Option 2'];
+    : ['KFC', 'Chicken Republic', 'Kilimanjaro', 'The Place', "Domino's"];
 
-  // Check if current participant already made a selection in this round
+  // Total card slots in 3 columns: ensure at least 6 cards (3x2 grid) exactly as in design reference
+  const totalSlots = Math.max(6, cleanOptions.length);
+
+  // Check if current participant already made a selection
   const existingParticipantSelection = currentUserId && plan?.participantSelections
     ? plan.participantSelections[currentUserId]
     : undefined;
@@ -128,25 +136,58 @@ export const BlindPickDecider: React.FC<BlindPickDeciderProps> = ({
     existingParticipantSelection ? existingParticipantSelection.option : null
   );
 
+  const [isLocallyFinalized, setIsLocallyFinalized] = useState<boolean>(
+    Boolean(plan?.status === 'confirmed' && plan?.finalDecision)
+  );
+
+  const [shuffledIndices, setShuffledIndices] = useState<number[]>(() =>
+    generateShuffledIndices(totalSlots)
+  );
+
+  const [revealedSlotIdx, setRevealedSlotIdx] = useState<number | null>(null);
+  const [isShufflingAnimation, setIsShufflingAnimation] = useState<boolean>(false);
+
+  const isPickedRef = useRef(false);
+  const prevIsOpenRef = useRef(false);
+
+  // Synchronize when existing participant selection or plan status changes
   useEffect(() => {
     if (existingParticipantSelection) {
       setMyPickResult(existingParticipantSelection.option);
     } else {
       setMyPickResult(null);
     }
-  }, [existingParticipantSelection, currentUserId, plan?.id, plan?.decisionRound]);
+    setIsLocallyFinalized(Boolean(plan?.status === 'confirmed' && plan?.finalDecision));
+  }, [existingParticipantSelection, currentUserId, plan?.id, plan?.status, plan?.finalDecision, plan?.decisionRound]);
 
-  const hasParticipated = Boolean(myPickResult);
+  useEffect(() => {
+    if (isOpen && !prevIsOpenRef.current) {
+      isPickedRef.current = Boolean(myPickResult);
+      if (!myPickResult) {
+        setRevealedSlotIdx(null);
+        setShuffledIndices(generateShuffledIndices(totalSlots));
+      }
+    }
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, myPickResult, totalSlots]);
+
+  if (!isOpen) return null;
+
+  const hasSelected = Boolean(myPickResult);
+  const isEffectivelyFinalized = isLocallyFinalized || (plan?.status === 'confirmed' && Boolean(plan?.finalDecision));
 
   // Compute collective decision outcome
-  const tally = plan 
-    ? calculateCollectiveFunDecision(plan, totalEligibleMembers)
+  const baseTally = plan
+    ? calculateCollectiveFunDecision(plan, totalEligibleMembers || 20)
     : {
-        totalEligible: totalEligibleMembers,
-        completedCount: hasParticipated ? 1 : 0,
-        remainingCount: Math.max(0, totalEligibleMembers - (hasParticipated ? 1 : 0)),
-        isAllCompleted: totalEligibleMembers <= (hasParticipated ? 1 : 0),
-        countsByOption: cleanOptions.reduce((acc, opt) => ({ ...acc, [opt]: opt === myPickResult ? 1 : 0 }), {} as Record<string, number>),
+        totalEligible: totalEligibleMembers || 20,
+        completedCount: hasSelected ? 1 : 0,
+        remainingCount: Math.max(0, (totalEligibleMembers || 20) - (hasSelected ? 1 : 0)),
+        isAllCompleted: false,
+        countsByOption: cleanOptions.reduce(
+          (acc, opt) => ({ ...acc, [opt]: opt === myPickResult ? 1 : 0 }),
+          {} as Record<string, number>
+        ),
         selectionsByOption: {},
         leader: myPickResult ? { option: myPickResult, count: 1 } : null,
         winner: null,
@@ -155,55 +196,67 @@ export const BlindPickDecider: React.FC<BlindPickDeciderProps> = ({
         percentageCompleted: 0,
       };
 
-  // Synchronously initialize deck
-  const [shuffledIndices, setShuffledIndices] = useState<number[]>(() => 
-    generateShuffledIndices(cleanOptions.length)
-  );
-  const [revealedSlotIdx, setRevealedSlotIdx] = useState<number | null>(null);
+  // Adjust counts with local pick if not yet saved into plan.participantSelections
+  const displayCounts: Record<string, number> = { ...baseTally.countsByOption };
+  let displayCompletedCount = baseTally.completedCount;
 
-  // Ref lock to prevent double-clicks or rapid multi-tap race conditions
-  const isPickedRef = useRef(false);
-  const prevIsOpenRef = useRef(false);
+  if (myPickResult && (!plan?.participantSelections || !plan.participantSelections[currentUserId])) {
+    displayCounts[myPickResult] = (displayCounts[myPickResult] || 0) + 1;
+    displayCompletedCount = Math.min(baseTally.totalEligible, displayCompletedCount + 1);
+  }
 
-  useEffect(() => {
-    if (isOpen && !prevIsOpenRef.current) {
-      isPickedRef.current = Boolean(myPickResult);
-      if (!myPickResult) {
-        setRevealedSlotIdx(null);
-        setShuffledIndices(generateShuffledIndices(cleanOptions.length));
-      }
+  // Calculate highest option for leader/winner
+  let highestCount = 0;
+  let topOpt = cleanOptions[0];
+  Object.entries(displayCounts).forEach(([opt, cnt]) => {
+    if (cnt > highestCount) {
+      highestCount = cnt;
+      topOpt = opt;
     }
-    prevIsOpenRef.current = isOpen;
-  }, [isOpen, myPickResult, cleanOptions.length]);
+  });
 
-  if (!isOpen) return null;
+  const displayTotalEligible = plan?.totalParticipantsNeeded || totalEligibleMembers || 20;
 
-  // Single-click card pick: exactly 1 turn per participant
-  const handlePickCard = (cardSlotIndex: number) => {
-    // Guard against multiple clicks or picking after already completed
-    if (hasParticipated || isPickedRef.current || revealedSlotIdx !== null) {
-      return;
-    }
-    isPickedRef.current = true;
+  // Determine winner option to mark in Tally
+  const winnerOption = isEffectivelyFinalized
+    ? (plan?.wheelWinningOption || plan?.currentSelection || myPickResult || baseTally.winner?.option || topOpt)
+    : (baseTally.winner?.option || (highestCount > 0 && highestCount >= displayTotalEligible ? topOpt : null));
 
-    // Determine option for this slot
-    const chosenOptionIndex = shuffledIndices[cardSlotIndex] ?? (cardSlotIndex % cleanOptions.length);
-    const winner = cleanOptions[chosenOptionIndex] || cleanOptions[0];
-
-    // Sound & visuals
+  // Re-shuffle action
+  const handleReshuffle = () => {
+    if (isEffectivelyFinalized) return;
+    setIsShufflingAnimation(true);
     playCardFlipSound();
-    setRevealedSlotIdx(cardSlotIndex);
-    setMyPickResult(winner);
+    setShuffledIndices(generateShuffledIndices(totalSlots));
+    setRevealedSlotIdx(null);
+    setMyPickResult(null);
+    isPickedRef.current = false;
+    setTimeout(() => {
+      setIsShufflingAnimation(false);
+    }, 280);
+  };
 
-    // Record participant's choice in collective engine
-    onSaveParticipantSelection(winner);
+  // Single-click card pick
+  const handlePickCard = (slotIdx: number) => {
+    if (isEffectivelyFinalized) return;
 
-    // Fanfare & celebration
+    isPickedRef.current = true;
+    const optIdx = shuffledIndices[slotIdx] ?? (slotIdx % cleanOptions.length);
+    const chosenOption = cleanOptions[optIdx % cleanOptions.length];
+
+    playCardFlipSound();
+    setRevealedSlotIdx(slotIdx);
+    setMyPickResult(chosenOption);
+
+    // Save selection to parent
+    onSaveParticipantSelection(chosenOption);
+
+    // Celebration
     setTimeout(() => {
       playWinFanfare();
       try {
         confetti({
-          particleCount: 50,
+          particleCount: 55,
           spread: 70,
           origin: { y: 0.6 },
           colors: ['#F59E0B', '#EF4444', '#10B981', '#3B82F6', '#8B5CF6'],
@@ -211,352 +264,222 @@ export const BlindPickDecider: React.FC<BlindPickDeciderProps> = ({
       } catch {
         // Safe fallback
       }
-    }, 180);
+    }, 150);
+  };
+
+  // Finalise action
+  const handleFinalize = () => {
+    if (!hasSelected) return;
+    const winningOpt = myPickResult || topOpt || cleanOptions[0];
+    setIsLocallyFinalized(true);
+    if (onFinalizeEarly) {
+      onFinalizeEarly(winningOpt);
+    }
+    playWinFanfare();
+    try {
+      confetti({
+        particleCount: 70,
+        spread: 80,
+        origin: { y: 0.5 },
+        colors: ['#F59E0B', '#10B981', '#3B82F6', '#8B5CF6'],
+      });
+    } catch {
+      // Safe fallback
+    }
+  };
+
+  // Undo-finalisation action
+  const handleUndoFinalize = () => {
+    setIsLocallyFinalized(false);
+    if (onUndoFinalize) {
+      onUndoFinalize();
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-xs animate-in fade-in duration-150">
-      <div 
-        className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-[#ECEFF3] flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-150"
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+      <div
+        className="bg-white w-full max-w-[440px] sm:max-w-[460px] rounded-[32px] p-5 sm:p-6 shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto relative scrollbar-none animate-in zoom-in-95 duration-150"
         style={{ touchAction: 'manipulation' }}
       >
-        {/* Top Header */}
-        <div className="px-5 py-3.5 border-b border-[#ECEFF3] bg-[#F8F9FB] flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className="text-2xl">{effectiveEmoji}</span>
+        {/* Top Header Bar */}
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl sm:text-3xl leading-none select-none">
+              {effectiveEmoji}
+            </span>
             <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-black uppercase tracking-wider text-purple-800">
-                  Fun Decider: Blind Pick Cards
-                </span>
-                {plan?.isReopened && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-900 text-[10px] font-black">
-                    Round {plan.decisionRound || 2} Reopened
-                  </span>
-                )}
-                <span className="px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-900 text-[10px] font-black">
-                  1 Pick / Participant
-                </span>
-              </div>
-              <h3 className="text-base font-black text-[#1A1B25] leading-tight">
+              <h3 className="text-base sm:text-lg font-black text-[#1A1B25] leading-tight">
                 {effectiveTitle}
               </h3>
+              <span className="inline-block mt-0.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#FFE4E6] text-[#E11D48]">
+                Blind Pick Card
+              </span>
             </div>
           </div>
+
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-white text-[#808897] hover:text-[#1A1B25] transition cursor-pointer"
+            aria-label="Close modal"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] flex items-center justify-center text-[#666D80] hover:text-[#1A1B25] transition cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-4 sm:p-5 flex-1 overflow-y-auto flex flex-col items-center justify-between space-y-4">
-          {/* Prompt Banner */}
-          <div className="w-full text-center px-2">
-            <h4 className="text-sm font-black text-[#1A1B25]">
-              {effectiveQuestion || `What will blind pick reveal for ${effectiveTitle}?`}
-            </h4>
-            <p className="text-xs text-[#666D80] mt-0.5">
-              {hasParticipated 
-                ? 'Your one-time mystery card selection is recorded! View the collective group results below.'
-                : '1 card per participant. Tap any face-down mystery card to draw your choice!'}
-            </p>
-          </div>
+        {/* Headline & Subtitle */}
+        <div className="w-full text-center mt-3">
+          <h4 className="text-lg sm:text-[19px] font-extrabold text-[#1A1B25] tracking-tight">
+            {effectiveQuestion}
+          </h4>
+          <p className="text-xs sm:text-[13px] text-[#808897] font-semibold mt-1 max-w-[280px] mx-auto leading-relaxed">
+            Tap any face-down mystery card to draw your choice!
+          </p>
 
-          {/* Cards Grid */}
-          <div className="w-full py-1">
-            <div className={`grid gap-2.5 transition-all duration-300 ${
-              cleanOptions.length <= 4 
-                ? 'grid-cols-2 sm:grid-cols-4' 
-                : cleanOptions.length <= 6 
-                ? 'grid-cols-3 sm:grid-cols-3' 
-                : 'grid-cols-3 sm:grid-cols-4'
-            }`}>
-              {cleanOptions.map((_, slotIdx) => {
-                const optIdx = shuffledIndices[slotIdx] ?? slotIdx;
-                const optionLabel = cleanOptions[optIdx];
-                const isThisSlotRevealed = revealedSlotIdx === slotIdx || (hasParticipated && myPickResult === optionLabel);
-                const isWinnerCard = isThisSlotRevealed && (myPickResult === optionLabel);
-                const cardGradient = CARD_COLORS[optIdx % CARD_COLORS.length];
+          {/* Centered Re-shuffle Button */}
+          <button
+            type="button"
+            onClick={handleReshuffle}
+            disabled={isEffectivelyFinalized}
+            className="mx-auto mt-2 flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-[#353849] hover:text-[#1A1B25] hover:bg-[#F6F8FA] transition cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${isShufflingAnimation ? 'animate-spin' : ''}`} />
+            <span>Re-shuffle</span>
+          </button>
+        </div>
 
-                return (
-                  <button
-                    key={slotIdx}
-                    type="button"
-                    onClick={() => handlePickCard(slotIdx)}
-                    disabled={hasParticipated}
-                    aria-label={`Mystery card ${slotIdx + 1}`}
-                    className={`relative aspect-[3/4] rounded-2xl p-2.5 transition-all duration-300 cursor-pointer flex flex-col items-center justify-center text-center select-none shadow-sm touch-manipulation ${
-                      !hasParticipated 
-                        ? 'bg-gradient-to-br from-[#1A1B25] to-[#272835] hover:scale-105 hover:shadow-md border border-[#353849] active:scale-95' 
-                        : isWinnerCard
-                        ? `bg-gradient-to-br ${cardGradient} text-white ring-4 ring-amber-400 shadow-lg scale-102`
-                        : 'bg-[#F8F9FB] border border-[#ECEFF3] text-[#808897] opacity-40 pointer-events-none'
-                    }`}
-                  >
-                    {!hasParticipated ? (
-                      // Card Back
-                      <div className="pointer-events-none flex flex-col items-center justify-center h-full">
-                        <span className="text-2xl mb-1">🎴</span>
-                        <span className="w-6 h-6 rounded-full bg-white/10 text-white/80 font-black text-xs flex items-center justify-center">
-                          ?
-                        </span>
-                        <span className="text-[10px] font-bold text-white/60 mt-1 uppercase tracking-widest">
-                          Pick
-                        </span>
-                      </div>
-                    ) : (
-                      // Card Front (Revealed)
-                      <div className="pointer-events-none flex flex-col items-center justify-center h-full animate-in zoom-in-75 duration-200">
-                        {isWinnerCard ? (
-                          <>
-                            <Trophy className="w-5 h-5 text-amber-200 mb-1 drop-shadow-xs" />
-                            <span className="text-xs font-black leading-tight text-white line-clamp-3">
-                              {optionLabel}
-                            </span>
-                            <span className="mt-1.5 px-1.5 py-0.5 rounded-full bg-white/20 text-[9px] font-extrabold uppercase tracking-wider text-white">
-                              Your Pick ✓
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-xs font-bold text-[#666D80] line-clamp-2">
-                            {optionLabel}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Participant Completed Status Banner */}
-          {hasParticipated && (
-            <div className="w-full p-3 rounded-2xl bg-purple-50 border border-purple-300 shadow-sm animate-in zoom-in-95 duration-200">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-purple-800 flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-purple-600" />
-                    <span>Your Mystery Pick Recorded</span>
+        {/* Mystery Cards Section */}
+        <div className="w-full my-4">
+          {!hasSelected ? (
+            <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
+              {Array.from({ length: totalSlots }).map((_, slotIdx) => (
+                <button
+                  key={slotIdx}
+                  type="button"
+                  onClick={() => handlePickCard(slotIdx)}
+                  aria-label={`Mystery card ${slotIdx + 1}`}
+                  className={`h-24 sm:h-28 rounded-[18px] bg-[#707C8E] flex flex-col items-center justify-center text-center cursor-pointer hover:scale-[1.03] active:scale-95 transition-all shadow-xs select-none ${
+                    isShufflingAnimation ? 'scale-95 rotate-1 opacity-80' : ''
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white font-black text-sm mb-1">
+                    ?
+                  </div>
+                  <span className="text-xs font-bold text-white tracking-wide">
+                    Pick
                   </span>
-                  <p className="text-sm font-black text-purple-950 truncate">
-                    {myPickResult}
-                  </p>
-                </div>
-                <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 text-[10px] font-bold shrink-0">
-                  Completed ✓
+                </button>
+              ))}
+            </div>
+          ) : (
+            /* After picking, display only the selected card strictly matching the reference */
+            <div className="flex items-center justify-center gap-5 my-3 select-none">
+              <div className="w-[124px] h-[124px] sm:w-[134px] sm:h-[134px] rounded-[22px] bg-gradient-to-b from-[#F5A623] via-[#F37023] to-[#E04B16] flex flex-col items-center justify-center text-center p-3 shrink-0 shadow-xs animate-in zoom-in-95 duration-200">
+                <Trophy className="w-9 h-9 text-white stroke-[2.2] mb-1.5 drop-shadow-xs" />
+                <span className="text-lg sm:text-xl font-black text-white tracking-wide truncate max-w-full px-1">
+                  {myPickResult}
                 </span>
               </div>
+              <span className="text-lg sm:text-xl font-semibold text-[#808897] select-none font-sans">
+                Your pick
+              </span>
             </div>
           )}
+        </div>
 
-          {/* Live Collective Group Tally & Results Breakdown */}
-          <div className="w-full p-3.5 rounded-2xl bg-[#F8F9FB] border border-[#ECEFF3] space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black uppercase tracking-wider text-[#1A1B25] flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-purple-700" />
-                <span>Collective Group Tally</span>
-              </span>
-              <span className="text-[11px] font-extrabold text-[#666D80]">
-                {tally.completedCount} of {tally.totalEligible} participants completed
-              </span>
-            </div>
+        {/* Collective Group Tally Section */}
+        <div className="w-full mt-2">
+          {/* Section Header */}
+          <div className="flex items-center justify-between mb-2.5 px-0.5">
+            <span className="text-xs sm:text-[13px] font-extrabold text-[#1A1B25]">
+              Collective Group Tally
+            </span>
+            <span className="text-xs font-bold text-[#808897]">
+              {displayCompletedCount}/{displayTotalEligible} participant
+            </span>
+          </div>
 
-            {/* Progress Bar */}
-            <div className="w-full bg-[#DFE1E6] h-2 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-gradient-to-r from-purple-500 to-indigo-600 transition-all duration-500 rounded-full"
-                style={{ width: `${tally.percentageCompleted}%` }}
-              />
-            </div>
+          {/* Option List Pills */}
+          <div className="space-y-2">
+            {cleanOptions.map((opt, i) => {
+              const isSelectedByMe = myPickResult === opt;
+              const isWinner = Boolean(
+                winnerOption &&
+                (winnerOption === opt || winnerOption.toLowerCase().includes(opt.toLowerCase()))
+              );
+              const dotColor = OPTION_DOT_COLORS[i % OPTION_DOT_COLORS.length];
+              const count = displayCounts[opt] || 0;
 
-            {/* Options Breakdown with Participant Chips */}
-            <div className="space-y-1.5 pt-1">
-              {cleanOptions.map((opt, i) => {
-                const count = tally.countsByOption[opt] || 0;
-                const voters = tally.selectionsByOption[opt] || [];
-                const finalizedWinner = isFinalized ? (plan?.wheelWinningOption || plan?.currentSelection) : null;
-                const isWinner = isFinalized
-                  ? (finalizedWinner === opt || (finalizedWinner ? finalizedWinner.includes(opt) : false))
-                  : (tally.winner?.option === opt);
-                const isLeader = !isWinner && tally.leader?.option === opt && count > 0;
-                const isMyPick = myPickResult === opt;
-
-                return (
-                  <div 
-                    key={i}
-                    className={`p-2 rounded-xl border transition-all ${
-                      isWinner
-                        ? 'bg-emerald-50 border-emerald-300 ring-1 ring-emerald-400'
-                        : isLeader
-                        ? 'bg-purple-50 border-purple-300 ring-1 ring-purple-300'
-                        : isMyPick
-                        ? 'bg-white border-purple-300'
-                        : 'bg-white border-[#ECEFF3]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0" />
-                        <span className="font-extrabold text-[#1A1B25] truncate">
-                          {opt}
-                        </span>
-                        {isMyPick && (
-                          <span className="px-1.5 py-0.2 rounded-md bg-purple-100 text-purple-900 text-[9px] font-black">
-                            You
-                          </span>
-                        )}
-                        {isWinner && (
-                          <span className="px-1.5 py-0.2 rounded-md bg-emerald-600 text-white text-[9px] font-black flex items-center gap-0.5">
-                            <Trophy className="w-2.5 h-2.5" />
-                            <span>Winner</span>
-                          </span>
-                        )}
-                        {isLeader && (
-                          <span className="px-1.5 py-0.2 rounded-md bg-purple-200 text-purple-950 text-[9px] font-black">
-                            Leading
-                          </span>
-                        )}
-                      </div>
-                      <span className="font-black text-[#1A1B25] shrink-0 ml-2">
-                        {count} {count === 1 ? 'selection' : 'selections'}
+              return (
+                <div
+                  key={opt}
+                  className={`px-4 py-2.5 sm:py-3 rounded-full flex items-center justify-between transition-all ${
+                    isSelectedByMe
+                      ? 'border-2 border-[#F59E0B] bg-[#FFF6E9]'
+                      : 'border border-[#ECEFF3] bg-[#F8F9FB]'
+                  }`}
+                >
+                  {/* Left: Dot + Name + (Winner Badge) */}
+                  <div className="flex items-center gap-2 min-w-0 pr-2">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: dotColor }}
+                    />
+                    <span className="font-bold text-xs sm:text-[13px] text-[#1A1B25] truncate">
+                      {opt}
+                    </span>
+                    {isWinner && (
+                      <span className="px-2 py-0.5 rounded-full bg-[#F59E0B] text-white text-[10px] font-bold inline-flex items-center gap-1 shrink-0 ml-1.5">
+                        <Trophy className="w-2.5 h-2.5" />
+                        <span>Winner</span>
                       </span>
-                    </div>
-
-                    {/* Participant Names */}
-                    {voters.length > 0 && (
-                      <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                        {voters.map((v, vIdx) => (
-                          <span 
-                            key={vIdx}
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#ECEFF3] text-[#353849] text-[10px] font-bold"
-                          >
-                            <span className="w-3.5 h-3.5 rounded-full bg-purple-500 text-white flex items-center justify-center text-[8px] font-black">
-                              {v.userName.charAt(0)}
-                            </span>
-                            <span>{v.userName}</span>
-                          </span>
-                        ))}
-                      </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
 
-            {/* Status Conclusion Banner */}
-            <div className="pt-1">
-              {isFinalized ? (
-                <div className="p-2.5 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-950 text-xs font-bold flex items-center gap-2">
-                  <Trophy className="w-4 h-4 text-emerald-700 shrink-0" />
-                  <span>
-                    Decision Finalized! <strong>{plan?.finalDecision || plan?.wheelWinningOption || plan?.currentSelection}</strong> is confirmed on the Plan.
+                  {/* Right: Selection count */}
+                  <span className="text-xs font-bold text-[#808897] shrink-0">
+                    {count} Selection
                   </span>
                 </div>
-              ) : tally.isAllCompleted && tally.winner ? (
-                <div className="p-2.5 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-950 text-xs font-bold flex items-center gap-2">
-                  <Trophy className="w-4 h-4 text-emerald-700 shrink-0" />
-                  <span>
-                    Collective decision completed! <strong>{tally.winner.option}</strong> won with {tally.winner.count} selections and is confirmed on the Plan.
-                  </span>
-                </div>
-              ) : (
-                <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-950 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-purple-700 shrink-0" />
-                  <span>
-                    {tally.completedCount === 0
-                      ? `Awaiting participant picks (0 of ${tally.totalEligible} completed).`
-                      : `In progress: ${tally.remainingCount} more participant${tally.remainingCount === 1 ? '' : 's'} needed to finalize collective decision.`}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Action Buttons: Note that Reshuffle & Pick Again is COMPLETELY REMOVED */}
-          <div className="w-full space-y-2 pt-1">
-            {hasParticipated ? (
-              <div className="w-full p-2.5 rounded-2xl bg-[#ECEFF3] text-[#666D80] text-center text-xs font-bold">
-                ✓ You have completed your one mystery card pick for this round.
-              </div>
-            ) : (
-              <div className="w-full p-2.5 rounded-2xl bg-purple-50 text-purple-900 text-center text-xs font-bold border border-purple-200">
-                Tap any mystery card above to make your selection.
-              </div>
-            )}
-
-            {/* Administrative Controls: Reopen Decision (Owner / Admin only) */}
-            {isOwnerOrAdmin && (
-              <div className="w-full p-3 rounded-2xl bg-blue-50/70 border border-blue-200 space-y-2 text-left mt-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-900">
-                    Admin / Owner Controls
-                  </span>
-                  <span className="text-[10px] font-bold text-blue-800">
-                    Round {plan?.decisionRound || 1}
-                  </span>
-                </div>
-                <p className="text-[11px] text-blue-950">
-                  {isFinalized
-                    ? 'This decision is currently finalized on the Plan. You can undo finalization to return to an active decision state without losing participant records.'
-                    : 'A completed decision stays closed. Only the Board Owner or Admin can finalize with the leader or reopen for a new round.'}
-                </p>
-                <div className="flex items-center gap-2 pt-1">
-                  {onReopenDecision && (
-                    <button
-                      type="button"
-                      onClick={onReopenDecision}
-                      className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs active:scale-95"
-                      title="Reset all participant choices and begin a new round"
-                    >
-                      <RotateCw className="w-3.5 h-3.5" />
-                      <span>Re-open Decision (Round {(plan?.decisionRound || 1) + 1})</span>
-                    </button>
-                  )}
-                  {isFinalized ? (
-                    onUndoFinalize && (
-                      <button
-                        type="button"
-                        onClick={onUndoFinalize}
-                        className="py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs active:scale-95"
-                        title="Undo finalization and return to active decision state"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                        <span>Undo Finalization / Re-open Decision</span>
-                      </button>
-                    )
-                  ) : (
-                    onFinalizeEarly && tally.leader && (
-                      <button
-                        type="button"
-                        onClick={() => onFinalizeEarly(tally.leader?.option)}
-                        className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs active:scale-95"
-                        title="Finalize group decision with current leading option"
-                      >
-                        <span>Finalize with Leader</span>
-                      </button>
-                    )
-                  )}
-                </div>
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-full py-2 text-xs font-bold text-[#808897] hover:text-[#1A1B25] transition cursor-pointer"
-            >
-              Done & Return to Board
-            </button>
+              );
+            })}
           </div>
         </div>
+
+        {/* Bottom Action Button Interaction: Only available to Board Owner/Admin */}
+        {isOwnerOrAdmin && (
+          <div className="w-full mt-4">
+            {!hasSelected ? (
+              <button
+                type="button"
+                disabled
+                className="w-full py-3.5 px-6 rounded-full bg-[#DFE1E6] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 cursor-not-allowed select-none"
+              >
+                <Check className="w-4 h-4 stroke-[2.5]" />
+                <span>Finalise</span>
+              </button>
+            ) : isEffectivelyFinalized ? (
+              <button
+                type="button"
+                onClick={handleUndoFinalize}
+                className="w-full py-3.5 px-6 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xs cursor-pointer active:scale-98 transition select-none"
+              >
+                <RotateCcw className="w-4 h-4 stroke-[2.5]" />
+                <span>Undo-finalisation</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleFinalize}
+                className="w-full py-3.5 px-6 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xs cursor-pointer active:scale-98 transition select-none"
+              >
+                <Check className="w-4 h-4 stroke-[2.5]" />
+                <span>Finalise</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

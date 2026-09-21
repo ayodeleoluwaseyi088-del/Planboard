@@ -1,5 +1,4 @@
 import React from 'react';
-import { Sparkles, MessageCircle } from 'lucide-react';
 import { ActivityLog } from '../types';
 
 interface ActivityFeedProps {
@@ -8,37 +7,35 @@ interface ActivityFeedProps {
 
 export const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities }) => {
   return (
-    <section className="mb-8">
-      <div className="flex items-center justify-between mb-3">
+    <section id="activity-feed-section" className="scroll-mt-20">
+      {/* Section Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
-          <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#666D80]">
-            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>Lightweight Plan Updates</span>
-          </div>
-          <h3 className="text-base sm:text-lg font-black text-[#1A1B25]">
+          <h2 className="text-xl sm:text-2xl font-black text-[#1A1B25]">
             Recent Activity
-          </h3>
+          </h2>
+          <p className="text-xs sm:text-sm text-[#808897] mt-0.5">
+            Live planning logs from participants
+          </p>
         </div>
-        <span className="text-[11px] font-bold text-[#808897] bg-white px-2.5 py-1 rounded-full border border-[#ECEFF3]">
-          Live planning logs
-        </span>
       </div>
 
-      <div className="bg-white rounded-3xl p-4 sm:p-5 border border-[#ECEFF3] shadow-xs space-y-3">
+      {/* Main Card */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#F6F8FA] shadow-[3px_4px_20px_0px_#ECEFF3] divide-y divide-[#ECEFF3]">
         {activities.map((act) => (
           <div
             key={act.id}
-            className="flex items-center justify-between gap-3 text-xs py-1 border-b border-[#ECEFF3] last:border-b-0 last:pb-0"
+            className="py-3 flex items-center justify-between gap-3 text-xs first:pt-0 last:pb-0"
           >
-            <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
               <img
                 src={act.actorAvatar}
                 alt={act.actorName}
-                className="w-7 h-7 rounded-full object-cover border border-white shrink-0 shadow-2xs"
+                className="w-8 h-8 rounded-full object-cover shrink-0"
               />
               <div className="truncate">
-                <strong className="text-[#1A1B25] font-black mr-1">{act.actorName}</strong>
-                <span className="text-[#353849] font-medium">{act.actionText}</span>
+                <span className="text-[#1A1B25] font-bold mr-1.5">{act.actorName}</span>
+                <span className="text-[#666D80]">{act.actionText}</span>
               </div>
             </div>
 
@@ -47,7 +44,14 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities }) => {
             </span>
           </div>
         ))}
+
+        {activities.length === 0 && (
+          <div className="py-8 text-center text-xs text-[#808897]">
+            No recent activity yet.
+          </div>
+        )}
       </div>
     </section>
   );
 };
+

@@ -20,6 +20,7 @@ import { AttachedPlan, DeciderType, ItemPriority, UserPersona, BoardMember, Imag
 import { ImagePickerField } from './ImagePickerField';
 import { DateTimePicker } from './DateTimePicker';
 import { DEFAULT_IMAGE_POSITION } from '../utils/imagePosition';
+import { CornerCheckBadge } from './SelectionBadge';
 
 interface EditPlanModalProps {
   isOpen: boolean;
@@ -321,23 +322,24 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-[#ECEFF3] animate-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col">
+      <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#ECEFF3] flex items-center justify-between bg-[#F8F9FB]">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">{emoji}</span>
+        <div className="shrink-0 px-6 py-4.5 flex items-center justify-between bg-white sticky top-0 z-20">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">{emoji}</span>
             <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-amber-800">
-                Decider Configuration
-              </span>
-              <h3 className="text-lg font-black text-[#1A1B25]">
+              <h3 className="text-base font-extrabold text-[#1A1B25]">
                 {title || plan.title}
               </h3>
+              <p className="text-xs text-[#666D80]">
+                Decider Configuration & Details
+              </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-white text-[#808897] hover:text-[#1A1B25] transition cursor-pointer"
+            className="w-9 h-9 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] text-[#808897] hover:text-[#1A1B25] flex items-center justify-center transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -346,7 +348,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
         {/* Delete Confirmation Alert */}
         {showDeleteConfirm ? (
           <div className="p-6 space-y-4">
-            <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-start gap-3">
+            <div className="p-4 rounded-2xl bg-rose-50 flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
               <div>
                 <h4 className="text-sm font-extrabold text-rose-950">
@@ -362,7 +364,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-[#DFE1E6] hover:bg-[#F6F8FA] text-xs font-bold text-[#1A1B25] transition cursor-pointer"
+                className="flex-1 py-2.5 px-4 rounded-xl bg-[#F6F8FA] hover:bg-[#ECEFF3] text-xs font-bold text-[#1A1B25] transition cursor-pointer"
               >
                 Cancel
               </button>
@@ -376,8 +378,9 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
-            {/* Title & Emoji */}
+          <>
+            <form id="edit-plan-form" onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1 bg-white pb-8">
+              {/* Title & Emoji */}
             <div className="grid grid-cols-4 gap-2">
               <div className="col-span-1">
                 <label className="block text-xs font-black uppercase tracking-wider text-[#666D80] mb-1">
@@ -386,7 +389,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                 <select
                   value={emoji}
                   onChange={(e) => setEmoji(e.target.value)}
-                  className="w-full px-2 py-2 text-base rounded-xl border border-[#DFE1E6] bg-white text-center cursor-pointer font-bold"
+                  className="w-full px-2 py-2 text-base rounded-xl bg-white text-center cursor-pointer font-bold outline-none"
                 >
                   {EMOJI_LIST.map((em) => (
                     <option key={em} value={em}>
@@ -403,7 +406,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500 font-bold"
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none font-bold"
                   required
                 />
               </div>
@@ -431,13 +434,14 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                       key={d.type}
                       type="button"
                       onClick={() => setDeciderType(d.type)}
-                      className={`p-2.5 rounded-2xl border text-center flex flex-col items-center gap-1 transition cursor-pointer ${
+                      className={`relative p-2.5 rounded-2xl text-center flex flex-col items-center gap-1 transition cursor-pointer select-none ${
                         isSelected
-                          ? 'bg-amber-50 border-amber-400 text-amber-950 ring-1 ring-amber-400 font-black'
-                          : 'bg-[#F8F9FB] border-[#DFE1E6] text-[#666D80] hover:bg-[#ECEFF3]'
+                          ? 'bg-[#FFF9F0] text-[#1A1B25] shadow-xs font-black'
+                          : 'bg-[#F8F9FB] text-[#666D80] hover:bg-[#ECEFF3]'
                       }`}
                     >
-                      <Icon className={`w-4 h-4 ${d.color}`} />
+                      {isSelected && <CornerCheckBadge size="sm" />}
+                      <Icon className={`w-4 h-4 ${isSelected ? 'text-[#EFA00E]' : d.color}`} />
                       <span className="text-xs">{d.label}</span>
                     </button>
                   );
@@ -447,7 +451,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
 
             {/* Decider Content Fields */}
             {deciderType === 'voting' && (
-              <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl border border-[#ECEFF3]">
+              <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl">
                 <div>
                   <label className="block text-xs font-black uppercase tracking-wider text-[#666D80] mb-1">
                     Question for the Group
@@ -456,7 +460,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                     type="text"
                     value={votingQuestion}
                     onChange={(e) => setVotingQuestion(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500 font-bold"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none font-bold"
                     required
                   />
                 </div>
@@ -481,7 +485,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                           type="text"
                           value={opt}
                           onChange={(e) => handleUpdateVotingOption(i, e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500"
+                          className="w-full px-3 py-1.5 text-xs rounded-xl bg-white outline-none"
                           required
                         />
                         {votingOptions.length > 2 && (
@@ -506,14 +510,14 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                     type="text"
                     value={votingDeadline}
                     onChange={(e) => setVotingDeadline(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none"
                   />
                 </div>
               </div>
             )}
 
             {deciderType === 'fixed_info' && (
-              <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl border border-[#ECEFF3]">
+              <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl">
                 <div>
                   <label className="block text-xs font-black uppercase tracking-wider text-[#666D80] mb-1">
                     Fixed Information Content
@@ -522,7 +526,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                     rows={3}
                     value={fixedInfoValue}
                     onChange={(e) => setFixedInfoValue(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none"
                     required
                   />
                 </div>
@@ -530,7 +534,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
             )}
 
             {deciderType === 'task_duty' && (
-              <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl border border-[#ECEFF3]">
+              <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl">
                 <div>
                   <label className="block text-xs font-black uppercase tracking-wider text-[#666D80] mb-1">
                     Task Instructions / Scope
@@ -539,7 +543,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                     rows={2}
                     value={taskDescription}
                     onChange={(e) => setTaskDescription(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none"
                     required
                   />
                 </div>
@@ -551,7 +555,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                   <select
                     value={assigneeId}
                     onChange={(e) => setAssigneeId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none cursor-pointer"
                   >
                     <option value="">Leave open for volunteers 🙋</option>
                     {members.map((m) => (
@@ -570,14 +574,14 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                     type="text"
                     value={taskDeadline}
                     onChange={(e) => setTaskDeadline(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none"
                   />
                 </div>
               </div>
             )}
 
             {deciderType === 'photo_idea' && (
-              <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl border border-[#ECEFF3]">
+              <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl">
                 <div>
                   <label className="block text-xs font-black uppercase tracking-wider text-[#666D80] mb-1">
                     Prompt for Submissions
@@ -586,7 +590,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                     rows={2}
                     value={ideaDescription}
                     onChange={(e) => setIdeaDescription(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none"
                     required
                   />
                 </div>
@@ -609,8 +613,8 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
 
             {/* Decider Type 5: Participant Status */}
             {deciderType === 'participant_status' && (
-              <div className="space-y-3.5 p-3.5 bg-[#F8F9FB] rounded-2xl border border-[#ECEFF3]">
-                <div className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-100 flex items-start gap-2.5">
+              <div className="space-y-3.5 p-3.5 bg-[#F8F9FB] rounded-2xl">
+                <div className="p-3 rounded-xl bg-indigo-50/70 flex items-start gap-2.5">
                   <Users className="w-4 h-4 text-indigo-700 shrink-0 mt-0.5" />
                   <div className="text-xs">
                     <p className="font-black text-indigo-950">
@@ -631,7 +635,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                     value={statusQuestion}
                     onChange={(e) => setStatusQuestion(e.target.value)}
                     placeholder="e.g. Who will be attending? or Who has made their payment?"
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500 font-bold text-[#1A1B25]"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none font-bold text-[#1A1B25]"
                     required
                   />
                 </div>
@@ -661,7 +665,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                           value={opt}
                           onChange={(e) => handleUpdateStatusOption(idx, e.target.value)}
                           placeholder={`Option ${idx + 1}`}
-                          className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500 font-medium text-[#1A1B25]"
+                          className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-white outline-none font-medium text-[#1A1B25]"
                           required
                         />
                         {statusOptions.length > 2 && (
@@ -681,7 +685,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
 
                 {/* Live Roster Preview */}
                 {members.length > 0 && (
-                  <div className="pt-2 border-t border-[#ECEFF3]">
+                  <div className="pt-2">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[10px] font-black uppercase tracking-wider text-[#808897]">
                         Board Participants ({members.length})
@@ -694,13 +698,13 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                       {members.map((member) => (
                         <div
                           key={member.id}
-                          className="flex items-center justify-between p-2 rounded-xl bg-white border border-[#ECEFF3] text-xs"
+                          className="flex items-center justify-between p-2 rounded-xl bg-white text-xs"
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <img
                               src={member.avatar}
                               alt={member.name}
-                              className="w-6 h-6 rounded-full object-cover border border-[#DFE1E6]"
+                              className="w-6 h-6 rounded-full object-cover"
                             />
                             <span className="font-extrabold text-[#1A1B25] truncate">
                               {member.name}
@@ -715,7 +719,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                             {statusOptions.slice(0, 3).map((opt, i) => (
                               <span
                                 key={i}
-                                className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-[#F8F9FB] text-[#666D80] border border-[#DFE1E6]"
+                                className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-[#F8F9FB] text-[#666D80]"
                               >
                                 {opt || `Option ${i + 1}`}
                               </span>
@@ -731,9 +735,9 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
 
             {/* Deciders 6 & 7: Wheel Spinner & Blind Pick Configuration */}
             {(deciderType === 'wheel_spinner' || deciderType === 'blind_pick') && (
-              <div className="space-y-4 p-4 bg-[#F8F9FB] rounded-2xl border border-[#ECEFF3]">
+              <div className="space-y-4 p-4 bg-[#F8F9FB] rounded-2xl">
                 {/* Explanatory Banner */}
-                <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 flex items-start gap-2.5">
+                <div className="p-3 rounded-xl bg-amber-50/80 flex items-start gap-2.5">
                   <Sparkles className="w-4 h-4 text-amber-800 shrink-0 mt-0.5" />
                   <div className="text-xs">
                     <p className="font-black text-amber-950">
@@ -759,7 +763,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                     value={spinnerQuestion}
                     onChange={(e) => setSpinnerQuestion(e.target.value)}
                     placeholder={deciderType === 'wheel_spinner' ? 'e.g. Where should we eat?' : 'e.g. Which activity should we do first?'}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500 font-bold text-[#1A1B25]"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none font-bold text-[#1A1B25]"
                     required
                   />
                 </div>
@@ -776,7 +780,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                         setSpinnerQuestion('Where should we eat?');
                         handleLoadSpinnerPreset(['KFC', 'Chicken Republic', 'Kilimanjaro', 'The Place', "Domino's"]);
                       }}
-                      className="px-2.5 py-1 text-[11px] rounded-lg bg-white border border-[#DFE1E6] hover:border-amber-400 text-[#353849] font-bold transition cursor-pointer"
+                      className="px-2.5 py-1 text-[11px] rounded-lg bg-white hover:bg-amber-50 text-[#353849] font-bold transition cursor-pointer"
                     >
                       🍔 Fast Food / Dining
                     </button>
@@ -786,7 +790,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                         setSpinnerQuestion('Which activity should we do next?');
                         handleLoadSpinnerPreset(['Beach Volleyball', 'Board Game Tournament', 'Karaoke Session', 'Cocktail Making', 'Sunset Walk']);
                       }}
-                      className="px-2.5 py-1 text-[11px] rounded-lg bg-white border border-[#DFE1E6] hover:border-amber-400 text-[#353849] font-bold transition cursor-pointer"
+                      className="px-2.5 py-1 text-[11px] rounded-lg bg-white hover:bg-amber-50 text-[#353849] font-bold transition cursor-pointer"
                     >
                       🎯 Activities & Games
                     </button>
@@ -796,7 +800,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                         setSpinnerQuestion('What party music vibe?');
                         handleLoadSpinnerPreset(['Afrobeats & Amapiano', 'Throwback 90s/2000s Hits', 'Chill House & Sunset', 'Hip-Hop & R&B']);
                       }}
-                      className="px-2.5 py-1 text-[11px] rounded-lg bg-white border border-[#DFE1E6] hover:border-amber-400 text-[#353849] font-bold transition cursor-pointer"
+                      className="px-2.5 py-1 text-[11px] rounded-lg bg-white hover:bg-amber-50 text-[#353849] font-bold transition cursor-pointer"
                     >
                       🎵 Music Vibes
                     </button>
@@ -860,7 +864,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                           value={opt}
                           onChange={(e) => handleUpdateSpinnerOption(idx, e.target.value)}
                           placeholder={`Segment ${idx + 1}`}
-                          className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500 font-bold text-[#1A1B25]"
+                          className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-white outline-none font-bold text-[#1A1B25]"
                           required
                         />
 
@@ -880,7 +884,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                 </div>
 
                 {/* Live Mini Preview */}
-                <div className="pt-3 border-t border-[#ECEFF3] flex items-center justify-between">
+                <div className="pt-3 flex items-center justify-between">
                   <div>
                     <span className="text-[10px] font-black uppercase tracking-wider text-[#808897] block">
                       Live Wheel Preview
@@ -926,7 +930,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
             )}
 
             {/* Optional Plan Date & Time Configuration */}
-            <div className="p-3.5 bg-[#F8F9FB] rounded-2xl border border-[#ECEFF3] space-y-3">
+            <div className="p-3.5 bg-[#F8F9FB] rounded-2xl space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-xl bg-amber-100 text-amber-700">
@@ -1001,7 +1005,7 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                     className={`px-3 py-1.5 rounded-xl text-xs font-extrabold capitalize transition cursor-pointer ${
                       priority === p
                         ? 'bg-[#1A1B25] text-white shadow-xs'
-                        : 'bg-[#F8F9FB] border border-[#DFE1E6] text-[#666D80] hover:bg-white'
+                        : 'bg-[#F8F9FB] text-[#666D80] hover:bg-[#ECEFF3]'
                     }`}
                   >
                     {p}
@@ -1009,36 +1013,29 @@ export const EditPlanModal: React.FC<EditPlanModalProps> = ({
                 ))}
               </div>
             </div>
-
-            {/* Action Buttons */}
-            <div className="pt-3 border-t border-[#ECEFF3] flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="px-3 py-2.5 rounded-2xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Remove Plan</span>
-              </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2.5 rounded-2xl border border-[#DFE1E6] hover:bg-[#F6F8FA] text-xs font-bold text-[#1A1B25] transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="py-2.5 px-5 rounded-2xl bg-[#1A1B25] hover:bg-[#272835] text-white font-extrabold text-xs transition cursor-pointer shadow-md flex items-center gap-1.5"
-                >
-                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                  <span>Save Plan Changes</span>
-                </button>
-              </div>
-            </div>
           </form>
+
+          {/* Fixed / Sticky Bottom CTA Footer */}
+          <div className="shrink-0 sticky bottom-0 z-20 bg-[#F8F9FB] p-5 sm:p-6 rounded-b-3xl flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="px-4 py-3 sm:py-3.5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs sm:text-sm font-bold transition cursor-pointer flex items-center gap-1.5"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Remove Plan</span>
+            </button>
+
+            <button
+              type="submit"
+              form="edit-plan-form"
+              className="flex-1 py-3.5 sm:py-4 px-6 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white font-extrabold text-sm sm:text-base transition-all cursor-pointer shadow-sm flex items-center justify-center gap-2 active:scale-[0.99]"
+            >
+              <Check className="w-4 h-4 stroke-[2.5]" />
+              <span>Save Plan Changes</span>
+            </button>
+          </div>
+        </>
         )}
       </div>
     </div>

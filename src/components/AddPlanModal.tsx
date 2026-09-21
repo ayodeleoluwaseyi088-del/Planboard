@@ -22,6 +22,7 @@ import { SUGGESTED_PLANS, SuggestedPlanTemplate } from '../mockData';
 import { ImagePickerField } from './ImagePickerField';
 import { DateTimePicker } from './DateTimePicker';
 import { DEFAULT_IMAGE_POSITION } from '../utils/imagePosition';
+import { CornerCheckBadge } from './SelectionBadge';
 
 interface AddPlanModalProps {
   isOpen: boolean;
@@ -447,15 +448,15 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-[#ECEFF3] animate-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col">
+      <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col">
         {/* Top Header & Breadcrumb */}
-        <div className="px-6 py-4 border-b border-[#ECEFF3] bg-[#F8F9FB] flex items-center justify-between">
+        <div className="shrink-0 px-6 py-4 bg-[#F8F9FB] flex items-center justify-between sticky top-0 z-20">
           <div className="flex items-center gap-3">
             {step > 1 && (
               <button
                 type="button"
                 onClick={() => setStep((s) => (s === 3 ? 2 : 1))}
-                className="p-1.5 rounded-full hover:bg-white text-[#808897] hover:text-[#1A1B25] transition cursor-pointer"
+                className="w-8 h-8 rounded-full bg-white hover:bg-[#ECEFF3] text-[#666D80] hover:text-[#1A1B25] flex items-center justify-center transition cursor-pointer"
                 title="Go back"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -483,7 +484,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-white text-[#808897] hover:text-[#1A1B25] transition cursor-pointer"
+            className="w-9 h-9 rounded-full bg-white hover:bg-[#ECEFF3] text-[#808897] hover:text-[#1A1B25] flex items-center justify-center transition cursor-pointer"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -491,7 +492,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto flex-1">
+        <div className="p-6 overflow-y-auto flex-1 pb-8">
           {/* ========================================================================= */}
           {/* STEP 1: Select Suggested Plan OR Customize Your Own                      */}
           {/* ========================================================================= */}
@@ -519,7 +520,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                         key={template.id}
                         type="button"
                         onClick={() => handleSelectSuggestedPlan(template)}
-                        className="p-3 rounded-2xl bg-[#F6F8FA] hover:bg-[#ECEFF3] text-[#1A1B25] transition cursor-pointer text-left flex flex-col justify-between select-none group border border-transparent hover:border-[#DFE1E6] active:scale-98"
+                        className="p-3 rounded-2xl bg-[#F6F8FA] hover:bg-[#ECEFF3] text-[#1A1B25] transition cursor-pointer text-left flex flex-col justify-between select-none group active:scale-98"
                       >
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-2xl">{template.emoji}</span>
@@ -547,7 +548,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
               </div>
 
               {/* Customize Your Own Section */}
-              <div className="pt-3 border-t border-[#ECEFF3]">
+              <div className="pt-3">
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-black uppercase tracking-wider text-[#1A1B25]">
                     Customize Your Own
@@ -574,7 +575,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                         <select
                           value={customEmoji}
                           onChange={(e) => setCustomEmoji(e.target.value)}
-                          className="w-full py-1.5 px-2 text-base rounded-xl bg-white border border-[#DFE1E6] text-center font-bold cursor-pointer"
+                          className="w-full py-1.5 px-2 text-base rounded-xl bg-white text-center font-bold cursor-pointer outline-none"
                         >
                           {EMOJI_OPTIONS.map((em) => (
                             <option key={em} value={em}>
@@ -594,7 +595,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                           placeholder="e.g. Photography, Board Games, Afterparty..."
                           value={customTitle}
                           onChange={(e) => setCustomTitle(e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs rounded-xl bg-white border border-[#DFE1E6] font-bold text-[#1A1B25] focus:outline-amber-500"
+                          className="w-full px-3 py-1.5 text-xs rounded-xl bg-white font-bold text-[#1A1B25] outline-none"
                         />
                       </div>
                     </div>
@@ -720,22 +721,18 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                         key={d.type}
                         type="button"
                         onClick={() => setDeciderType(d.type)}
-                        className={`p-3.5 rounded-2xl text-left transition cursor-pointer flex flex-col justify-between border ${
+                        className={`relative p-3.5 rounded-2xl text-left transition cursor-pointer flex flex-col justify-between select-none ${
                           isSelected
-                            ? 'bg-amber-50 border-amber-400 text-amber-950 ring-1 ring-amber-400 shadow-xs'
-                            : 'bg-[#F6F8FA] border-[#ECEFF3] text-[#1A1B25] hover:bg-[#ECEFF3]'
+                            ? 'bg-[#FFF9F0] text-[#1A1B25] shadow-xs'
+                            : 'bg-[#F8F9FB] text-[#1A1B25] hover:bg-[#ECEFF3]'
                         }`}
                       >
+                        {isSelected && <CornerCheckBadge size="sm" />}
                         <div className="flex items-center justify-between mb-1.5">
                           <div className="flex items-center gap-1.5">
-                            <Icon className={`w-4 h-4 ${d.color}`} />
+                            <Icon className={`w-4 h-4 ${isSelected ? 'text-[#EFA00E]' : d.color}`} />
                             <span className="text-xs font-black">{d.label}</span>
                           </div>
-                          {isSelected && (
-                            <span className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center text-[10px]">
-                              ✓
-                            </span>
-                          )}
                         </div>
                         <p className="text-[11px] text-[#666D80] leading-snug">
                           {d.desc}
@@ -760,7 +757,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                       className={`px-3 py-1.5 rounded-xl text-xs font-extrabold capitalize transition cursor-pointer ${
                         priority === p
                           ? 'bg-[#1A1B25] text-white shadow-xs'
-                          : 'bg-[#F8F9FB] border border-[#DFE1E6] text-[#666D80] hover:bg-white'
+                          : 'bg-[#F8F9FB] text-[#666D80] hover:bg-[#ECEFF3]'
                       }`}
                     >
                       {p}
@@ -802,7 +799,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
 
               {/* Decider Type 1: Voting Configuration */}
               {deciderType === 'voting' && (
-                <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl border border-[#ECEFF3]">
+                <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl">
                   <div>
                     <label className="block text-xs font-black uppercase tracking-wider text-[#666D80] mb-1">
                       Question for the Group
@@ -812,7 +809,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                       value={votingQuestion}
                       onChange={(e) => setVotingQuestion(e.target.value)}
                       placeholder={`e.g. Which ${title.toLowerCase()} option do you prefer?`}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500 font-bold"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none font-bold"
                       required
                     />
                   </div>
@@ -838,7 +835,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                             value={opt}
                             onChange={(e) => handleUpdateVotingOption(i, e.target.value)}
                             placeholder={`Option ${i + 1}`}
-                            className="w-full px-3 py-1.5 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500"
+                            className="w-full px-3 py-1.5 text-xs rounded-xl bg-white outline-none"
                             required
                           />
                           {votingOptions.length > 2 && (
@@ -865,7 +862,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                       value={votingDeadline}
                       onChange={(e) => setVotingDeadline(e.target.value)}
                       placeholder="e.g. Voting closes Friday 6:00 PM"
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none"
                     />
                   </div>
                 </div>
@@ -873,7 +870,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
 
               {/* Decider Type 2: Fixed Info Configuration */}
               {deciderType === 'fixed_info' && (
-                <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl border border-[#ECEFF3]">
+                <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl">
                   <div>
                     <label className="block text-xs font-black uppercase tracking-wider text-[#666D80] mb-1">
                       Fixed Information / Ground Rule Content
@@ -883,7 +880,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                       value={fixedInfoValue}
                       onChange={(e) => setFixedInfoValue(e.target.value)}
                       placeholder="e.g. Everyone should bring their preferred drinks or bottle to share."
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none"
                       required
                     />
                   </div>
@@ -892,7 +889,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
 
               {/* Decider Type 3: Task / Duty Configuration */}
               {deciderType === 'task_duty' && (
-                <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl border border-[#ECEFF3]">
+                <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl">
                   <div>
                     <label className="block text-xs font-black uppercase tracking-wider text-[#666D80] mb-1">
                       Task Instructions / Scope
@@ -902,7 +899,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                       value={taskDescription}
                       onChange={(e) => setTaskDescription(e.target.value)}
                       placeholder={`e.g. Coordinate and handle ${title.toLowerCase()} for the group.`}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none"
                       required
                     />
                   </div>
@@ -914,7 +911,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                     <select
                       value={assigneeId}
                       onChange={(e) => setAssigneeId(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none cursor-pointer"
                     >
                       <option value="">Leave open for volunteers 🙋</option>
                       {members.map((m) => (
@@ -934,7 +931,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                       value={taskDeadline}
                       onChange={(e) => setTaskDeadline(e.target.value)}
                       placeholder="e.g. Complete before event day"
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none"
                     />
                   </div>
                 </div>
@@ -942,7 +939,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
 
               {/* Decider Type 4: Photo / Idea Configuration */}
               {deciderType === 'photo_idea' && (
-                <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl border border-[#ECEFF3]">
+                <div className="space-y-3 p-3.5 bg-[#F8F9FB] rounded-2xl">
                   <div>
                     <label className="block text-xs font-black uppercase tracking-wider text-[#666D80] mb-1">
                       Prompt for Submissions
@@ -952,7 +949,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                       value={ideaDescription}
                       onChange={(e) => setIdeaDescription(e.target.value)}
                       placeholder={`e.g. Submit photos, ideas, or venue references for ${title.toLowerCase()}.`}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none"
                       required
                     />
                   </div>
@@ -975,9 +972,9 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
 
               {/* Decider Type 5: Participant Status Configuration */}
               {deciderType === 'participant_status' && (
-                <div className="space-y-3.5 p-3.5 bg-[#F8F9FB] rounded-2xl border border-[#ECEFF3]">
+                <div className="space-y-3.5 p-3.5 bg-[#F8F9FB] rounded-2xl">
                   {/* Explanatory Banner */}
-                  <div className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-100 flex items-start gap-2.5">
+                  <div className="p-3 rounded-xl bg-indigo-50/70 flex items-start gap-2.5">
                     <Users className="w-4 h-4 text-indigo-700 shrink-0 mt-0.5" />
                     <div className="text-xs">
                       <p className="font-black text-indigo-950">
@@ -999,7 +996,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                       value={statusQuestion}
                       onChange={(e) => setStatusQuestion(e.target.value)}
                       placeholder="e.g. Who will be attending? or Who has made their payment?"
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500 font-bold text-[#1A1B25]"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none font-bold text-[#1A1B25]"
                       required
                     />
                   </div>
@@ -1016,7 +1013,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                           setStatusQuestion('Who will be attending?');
                           setStatusOptions(['I will', 'Maybe', 'Not available']);
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-white border border-[#DFE1E6] text-[11px] font-bold text-[#1A1B25] hover:bg-amber-50 hover:border-amber-300 transition cursor-pointer flex items-center gap-1"
+                        className="px-2.5 py-1 rounded-lg bg-white text-[11px] font-bold text-[#1A1B25] hover:bg-amber-50 transition cursor-pointer flex items-center gap-1"
                       >
                         <span>🙋 Attendance (I will / Maybe / Not available)</span>
                       </button>
@@ -1026,7 +1023,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                           setStatusQuestion('Who has made their payment?');
                           setStatusOptions(['Paid', 'Not yet']);
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-white border border-[#DFE1E6] text-[11px] font-bold text-[#1A1B25] hover:bg-amber-50 hover:border-amber-300 transition cursor-pointer flex items-center gap-1"
+                        className="px-2.5 py-1 rounded-lg bg-white text-[11px] font-bold text-[#1A1B25] hover:bg-amber-50 transition cursor-pointer flex items-center gap-1"
                       >
                         <span>💳 Payment (Paid / Not yet)</span>
                       </button>
@@ -1036,7 +1033,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                           setStatusQuestion('What is your meal RSVP?');
                           setStatusOptions(['Standard', 'Vegetarian', 'Halal']);
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-white border border-[#DFE1E6] text-[11px] font-bold text-[#1A1B25] hover:bg-amber-50 hover:border-amber-300 transition cursor-pointer flex items-center gap-1"
+                        className="px-2.5 py-1 rounded-lg bg-white text-[11px] font-bold text-[#1A1B25] hover:bg-amber-50 transition cursor-pointer flex items-center gap-1"
                       >
                         <span>🍽️ Meal RSVP</span>
                       </button>
@@ -1069,7 +1066,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                             value={opt}
                             onChange={(e) => handleUpdateStatusOption(idx, e.target.value)}
                             placeholder={`Option ${idx + 1}`}
-                            className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500 font-medium text-[#1A1B25]"
+                            className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-white outline-none font-medium text-[#1A1B25]"
                             required
                           />
                           {statusOptions.length > 2 && (
@@ -1089,7 +1086,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
 
                   {/* Live Roster Preview */}
                   {members.length > 0 && (
-                    <div className="pt-2 border-t border-[#ECEFF3]">
+                    <div className="pt-2">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[10px] font-black uppercase tracking-wider text-[#808897]">
                           Joined Participants Preview ({members.length})
@@ -1102,13 +1099,13 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                         {members.map((member) => (
                           <div
                             key={member.id}
-                            className="flex items-center justify-between p-2 rounded-xl bg-white border border-[#ECEFF3] text-xs"
+                            className="flex items-center justify-between p-2 rounded-xl bg-white text-xs"
                           >
                             <div className="flex items-center gap-2 min-w-0">
                               <img
                                 src={member.avatar}
                                 alt={member.name}
-                                className="w-6 h-6 rounded-full object-cover border border-[#DFE1E6]"
+                                className="w-6 h-6 rounded-full object-cover"
                               />
                               <span className="font-extrabold text-[#1A1B25] truncate">
                                 {member.name}
@@ -1123,7 +1120,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                               {statusOptions.slice(0, 3).map((opt, i) => (
                                 <span
                                   key={i}
-                                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-[#F8F9FB] text-[#666D80] border border-[#DFE1E6]"
+                                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-[#F8F9FB] text-[#666D80]"
                                 >
                                   {opt || `Option ${i + 1}`}
                                 </span>
@@ -1139,9 +1136,9 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
 
               {/* Deciders 6 & 7: Wheel Spinner & Blind Pick Configuration */}
               {(deciderType === 'wheel_spinner' || deciderType === 'blind_pick') && (
-                <div className="space-y-4 p-4 bg-[#F8F9FB] rounded-2xl border border-[#ECEFF3]">
+                <div className="space-y-4 p-4 bg-[#F8F9FB] rounded-2xl">
                   {/* Explanatory Banner */}
-                  <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 flex items-start gap-2.5">
+                  <div className="p-3 rounded-xl bg-amber-50/80 flex items-start gap-2.5">
                     <Sparkles className="w-4 h-4 text-amber-800 shrink-0 mt-0.5" />
                     <div className="text-xs">
                       <p className="font-black text-amber-950">
@@ -1167,7 +1164,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                       value={spinnerQuestion}
                       onChange={(e) => setSpinnerQuestion(e.target.value)}
                       placeholder={deciderType === 'wheel_spinner' ? 'e.g. Where should we eat?' : 'e.g. Which activity should we do first?'}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500 font-bold text-[#1A1B25]"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-white outline-none font-bold text-[#1A1B25]"
                       required
                     />
                   </div>
@@ -1184,7 +1181,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                           setSpinnerQuestion('Where should we eat?');
                           handleLoadSpinnerPreset(['KFC', 'Chicken Republic', 'Kilimanjaro', 'The Place', "Domino's"]);
                         }}
-                        className="px-2.5 py-1 text-[11px] rounded-lg bg-white border border-[#DFE1E6] hover:border-amber-400 text-[#353849] font-bold transition cursor-pointer"
+                        className="px-2.5 py-1 text-[11px] rounded-lg bg-white hover:bg-amber-50 text-[#353849] font-bold transition cursor-pointer"
                       >
                         🍔 Fast Food / Dining
                       </button>
@@ -1194,7 +1191,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                           setSpinnerQuestion('Which activity should we do next?');
                           handleLoadSpinnerPreset(['Beach Volleyball', 'Board Game Tournament', 'Karaoke Session', 'Cocktail Making', 'Sunset Walk']);
                         }}
-                        className="px-2.5 py-1 text-[11px] rounded-lg bg-white border border-[#DFE1E6] hover:border-amber-400 text-[#353849] font-bold transition cursor-pointer"
+                        className="px-2.5 py-1 text-[11px] rounded-lg bg-white hover:bg-amber-50 text-[#353849] font-bold transition cursor-pointer"
                       >
                         🎯 Activities & Games
                       </button>
@@ -1204,7 +1201,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                           setSpinnerQuestion('What party music vibe?');
                           handleLoadSpinnerPreset(['Afrobeats & Amapiano', 'Throwback 90s/2000s Hits', 'Chill House & Sunset', 'Hip-Hop & R&B']);
                         }}
-                        className="px-2.5 py-1 text-[11px] rounded-lg bg-white border border-[#DFE1E6] hover:border-amber-400 text-[#353849] font-bold transition cursor-pointer"
+                        className="px-2.5 py-1 text-[11px] rounded-lg bg-white hover:bg-amber-50 text-[#353849] font-bold transition cursor-pointer"
                       >
                         🎵 Music Vibes
                       </button>
@@ -1268,7 +1265,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                             value={opt}
                             onChange={(e) => handleUpdateSpinnerOption(idx, e.target.value)}
                             placeholder={`Segment ${idx + 1}`}
-                            className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-[#DFE1E6] bg-white focus:outline-amber-500 font-bold text-[#1A1B25]"
+                            className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-white outline-none font-bold text-[#1A1B25]"
                             required
                           />
 
@@ -1288,7 +1285,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                   </div>
 
                   {/* Live Mini Preview */}
-                  <div className="pt-3 border-t border-[#ECEFF3] flex items-center justify-between">
+                  <div className="pt-3 flex items-center justify-between">
                     <div>
                       <span className="text-[10px] font-black uppercase tracking-wider text-[#808897] block">
                         Live Wheel Preview
@@ -1334,7 +1331,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
               )}
 
               {/* Optional Plan Date & Time Configuration */}
-              <div className="p-3.5 bg-[#F8F9FB] rounded-2xl border border-[#ECEFF3] space-y-3">
+              <div className="p-3.5 bg-[#F8F9FB] rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="p-1.5 rounded-xl bg-amber-100 text-amber-700">
@@ -1398,22 +1395,22 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
           )}
         </div>
 
-        {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-[#ECEFF3] flex items-center justify-between bg-[#F8F9FB]">
+        {/* Fixed / Sticky Bottom CTA Footer */}
+        <div className="shrink-0 sticky bottom-0 z-20 bg-[#F8F9FB] p-5 sm:p-6 rounded-b-3xl flex items-center justify-between gap-3">
           {step > 1 ? (
             <button
               type="button"
               onClick={() => setStep((s) => (s === 3 ? 2 : 1))}
-              className="px-4 py-2 rounded-xl border border-[#DFE1E6] hover:bg-white text-xs font-bold text-[#1A1B25] transition cursor-pointer flex items-center gap-1.5"
+              className="flex items-center gap-1.5 px-4 py-3 sm:py-3.5 rounded-full bg-white hover:bg-[#ECEFF3] text-xs sm:text-sm font-bold text-[#666D80] hover:text-[#1A1B25] transition cursor-pointer"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
+              <ArrowLeft className="w-4 h-4" />
               <span>Back</span>
             </button>
           ) : (
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-[#DFE1E6] hover:bg-white text-xs font-bold text-[#1A1B25] transition cursor-pointer"
+              className="px-5 py-3 sm:py-3.5 rounded-full bg-white hover:bg-[#ECEFF3] text-xs sm:text-sm font-bold text-[#666D80] hover:text-[#1A1B25] transition cursor-pointer"
             >
               Cancel
             </button>
@@ -1424,10 +1421,10 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
               <button
                 type="button"
                 onClick={handleProceedToStep3}
-                className="px-5 py-2 rounded-xl bg-[#1A1B25] hover:bg-[#272835] text-white text-xs font-extrabold transition cursor-pointer shadow-xs flex items-center gap-1.5 active:scale-98"
+                className="py-3.5 sm:py-4 px-6 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white font-extrabold text-sm sm:text-base transition-all cursor-pointer shadow-sm flex items-center justify-center gap-2 active:scale-[0.99]"
               >
                 <span>Configure Decider</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <ArrowRight className="w-4 h-4" />
               </button>
             )}
 
@@ -1435,9 +1432,9 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
               <button
                 type="submit"
                 form="decider-config-form"
-                className="px-5 py-2 rounded-xl bg-[#1A1B25] hover:bg-[#272835] text-white text-xs font-extrabold transition cursor-pointer shadow-xs flex items-center gap-1.5 active:scale-98"
+                className="py-3.5 sm:py-4 px-6 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white font-extrabold text-sm sm:text-base transition-all cursor-pointer shadow-sm flex items-center justify-center gap-2 active:scale-[0.99]"
               >
-                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                <Check className="w-4 h-4 stroke-[2.5]" />
                 <span>Save & Add Plan</span>
               </button>
             )}

@@ -160,50 +160,53 @@ export const MyPlansModal: React.FC<MyPlansModalProps> = ({
 
         {/* Filter Bar & Quick Stats */}
         <div className="px-6 py-3 bg-[#F8F9FB] border-b border-[#ECEFF3] flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2.5 sm:gap-3 overflow-x-auto pb-1 scrollbar-none">
             <button
+              type="button"
               onClick={() => setFilter('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-sm sm:text-[15px] whitespace-nowrap transition cursor-pointer flex items-center gap-2 ${
                 filter === 'all'
-                  ? 'bg-[#1A1B25] text-white shadow-xs'
-                  : 'bg-white border border-[#DFE1E6] text-[#666D80] hover:text-[#1A1B25]'
+                  ? 'bg-[#ECEFF3] text-[#1A1B25] font-bold border border-transparent'
+                  : 'bg-white border border-[#DFE1E6] text-[#666D80] font-semibold hover:bg-[#F6F8FA] hover:text-[#272835]'
               }`}
             >
               <span>All Plans</span>
-              <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${
-                filter === 'all' ? 'bg-white/20 text-white' : 'bg-[#ECEFF3] text-[#353849]'
+              <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                filter === 'all' ? 'bg-[#DFE1E6] text-[#1A1B25]' : 'bg-[#ECEFF3] text-[#666D80]'
               }`}>
                 {createdBoards.length + joinedBoards.length}
               </span>
             </button>
 
             <button
+              type="button"
               onClick={() => setFilter('created')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-sm sm:text-[15px] whitespace-nowrap transition cursor-pointer flex items-center gap-2 ${
                 filter === 'created'
-                  ? 'bg-[#1A1B25] text-white shadow-xs'
-                  : 'bg-white border border-[#DFE1E6] text-[#666D80] hover:text-[#1A1B25]'
+                  ? 'bg-[#ECEFF3] text-[#1A1B25] font-bold border border-transparent'
+                  : 'bg-white border border-[#DFE1E6] text-[#666D80] font-semibold hover:bg-[#F6F8FA] hover:text-[#272835]'
               }`}
             >
               <span>Created by Me</span>
-              <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${
-                filter === 'created' ? 'bg-white/20 text-white' : 'bg-[#ECEFF3] text-[#353849]'
+              <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                filter === 'created' ? 'bg-[#DFE1E6] text-[#1A1B25]' : 'bg-[#ECEFF3] text-[#666D80]'
               }`}>
                 {createdBoards.length}
               </span>
             </button>
 
             <button
+              type="button"
               onClick={() => setFilter('joined')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-sm sm:text-[15px] whitespace-nowrap transition cursor-pointer flex items-center gap-2 ${
                 filter === 'joined'
-                  ? 'bg-[#1A1B25] text-white shadow-xs'
-                  : 'bg-white border border-[#DFE1E6] text-[#666D80] hover:text-[#1A1B25]'
+                  ? 'bg-[#ECEFF3] text-[#1A1B25] font-bold border border-transparent'
+                  : 'bg-white border border-[#DFE1E6] text-[#666D80] font-semibold hover:bg-[#F6F8FA] hover:text-[#272835]'
               }`}
             >
               <span>Joined</span>
-              <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${
-                filter === 'joined' ? 'bg-white/20 text-white' : 'bg-[#ECEFF3] text-[#353849]'
+              <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                filter === 'joined' ? 'bg-[#DFE1E6] text-[#1A1B25]' : 'bg-[#ECEFF3] text-[#666D80]'
               }`}>
                 {joinedBoards.length}
               </span>

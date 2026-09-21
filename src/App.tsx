@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   PlanBoard, 
@@ -17,7 +17,8 @@ import {
   PlanSnapshot,
   ParticipantUserStatus,
   ImagePosition,
-  SuggestionImageItem
+  SuggestionImageItem,
+  DecisionOption
 } from './types';
 import { INITIAL_BOARD, USER_PERSONAS } from './mockData';
 import {
@@ -41,8 +42,6 @@ import { calculateCollectiveFunDecision } from './utils/deciderCollective';
 import { Header } from './components/Header';
 import { BoardHeader } from './components/BoardHeader';
 import { BoardPlansSection } from './components/BoardPlansSection';
-import { YourPartSection } from './components/YourPartSection';
-import { NeedsAttentionSection } from './components/NeedsAttentionSection';
 import { DecisionsSection } from './components/DecisionsSection';
 import { SuggestionsSection } from './components/SuggestionsSection';
 import { ContributionsSection } from './components/ContributionsSection';
@@ -66,6 +65,7 @@ import { CreatePlanModal } from './components/CreatePlanModal';
 import { CreateItemModal } from './components/CreateItemModal';
 import { MyPlansModal } from './components/MyPlansModal';
 import { AddSuggestionModal } from './components/AddSuggestionModal';
+import { BOARD_AVATARS } from './utils/boardAvatars';
 
 export default function App() {
   const [allBoards, setAllBoards] = useState<PlanBoard[]>(() => getAllStoredBoards());
@@ -79,6 +79,24 @@ export default function App() {
     return stored[0] || INITIAL_BOARD;
   });
   const [currentPersona, setCurrentPersona] = useState<UserPersona>(() => getStoredAuthUser());
+
+  // Active member on the current board (with board-specific custom name and avatar if configured)
+  const currentBoardMember = useMemo(() => {
+    return board.members?.find((m) => m.id === currentPersona.id);
+  }, [board.members, currentPersona.id]);
+
+  // Board-specific effective persona: ensures that selected custom name and avatar apply specifically to this board
+  const effectivePersona: UserPersona = useMemo(() => {
+    if (currentBoardMember) {
+      return {
+        ...currentPersona,
+        name: currentBoardMember.name || currentPersona.name,
+        avatar: currentBoardMember.avatar || currentPersona.avatar,
+        role: currentBoardMember.role || currentPersona.role,
+      };
+    }
+    return currentPersona;
+  }, [currentBoardMember, currentPersona]);
   const [activeEvolutionDay, setActiveEvolutionDay] = useState<'day1' | 'day3' | 'day5'>('day3');
   const [activeSection, setActiveSection] = useState<BoardSectionTab>('overview');
 
@@ -193,8 +211,8 @@ export default function App() {
   const addActivity = (actionText: string, badgeEmoji: string = '✨') => {
     const newActivity: ActivityLog = {
       id: `act-${Date.now()}`,
-      actorName: currentPersona.name,
-      actorAvatar: currentPersona.avatar,
+      actorName: effectivePersona.name,
+      actorAvatar: effectivePersona.avatar,
       actionText,
       timeAgo: 'Just now',
       badgeEmoji,
@@ -331,14 +349,16 @@ export default function App() {
         }
 
         const totalVotes = updatedOptions.reduce((sum, opt) => sum + opt.voteCount, 0);
-        const totalNeeded = dec.totalVotesNeeded || prev.members?.length || 4;
+        const totalNeeded = prev.members?.length > 0 ? prev.members.length : 1;
         const isVotingFinished = totalVotes >= totalNeeded;
 
-        let finalDecText = dec.finalDecision;
+        let isReopenedVal = dec.isReopened;
         let decStatus = dec.status;
+        let finalDecText = dec.finalDecision;
         if (isVotingFinished && leader && leader.voteCount > 0) {
           decStatus = 'completed' as const;
           finalDecText = `${leader.label} — ${leader.voteCount} votes`;
+          isReopenedVal = false;
         }
 
         return {
@@ -347,19 +367,88 @@ export default function App() {
           gamifiedNote: note,
           status: decStatus,
           finalDecision: finalDecText,
+          isReopened: isReopenedVal,
         };
       });
 
-      // SYNC TO PLANS: Update matching plan's options and leading choice in real time!
+      // SYNC TO PLANS & SUGGESTIONS: Update matching plan's options and leading choice in real time!
       const targetDecision = updatedDecisions.find((d) => d.id === decisionId);
+      let updatedSuggestions = [...prev.suggestions];
+
       const updatedPlans = prev.plans.map((plan) => {
         if (isPlanMatchingItem(plan, decision)) {
           const leader = targetDecision ? getLeadingOption(targetDecision.options) : null;
           const totalVotes = (targetDecision?.options || []).reduce((sum, opt) => sum + opt.voteCount, 0);
-          const totalNeeded = targetDecision?.totalVotesNeeded || prev.members?.length || 4;
+          const totalNeeded = prev.members?.length > 0 ? prev.members.length : 1;
           const isVotingFinished = totalVotes >= totalNeeded;
 
           if (isVotingFinished && leader && leader.voteCount > 0) {
+            // Check if leader option corresponds to a suggestion for this plan
+            const winningSug = prev.suggestions.find(
+              (s) =>
+                s.id === leader.id.replace(/^opt-/, '') ||
+                (leader as any).suggestionId === s.id ||
+                ((s.planId === plan.id || isPlanMatchingItem(plan, s)) && s.title.trim().toLowerCase() === leader.label.trim().toLowerCase())
+            );
+
+            if (winningSug) {
+              // Update suggestions state to mark winning suggestion as winner
+              updatedSuggestions = updatedSuggestions.map((s) => {
+                if (s.id === winningSug.id) {
+                  return { ...s, isSelectedWinner: true, status: 'fixed' as const };
+                }
+                if (s.planId === winningSug.planId || isPlanMatchingItem(plan, s)) {
+                  return { ...s, isSelectedWinner: false, status: 'open' as const };
+                }
+                return s;
+              });
+
+              const snapshotToPreserve: PlanSnapshot = plan.previousPlanSnapshot || {
+                currentSelection: plan.currentSelection,
+                initialSelection: plan.initialSelection,
+                previousSelection: plan.previousSelection,
+                location: plan.location,
+                imageUrl: plan.imageUrl,
+                imagePosition: plan.imagePosition,
+                images: plan.images,
+                ideaDesc: plan.ideaDesc,
+                description: plan.description,
+                infoValue: plan.infoValue,
+                finalDecision: plan.finalDecision,
+                status: plan.status,
+                isSelectedWinner: plan.isSelectedWinner,
+                decidedSource: plan.decidedSource,
+                decidedAt: plan.decidedAt,
+              };
+
+              // Auto-replace current Plan selection with the winning suggestion!
+              return {
+                ...plan,
+                previousPlanSnapshot: snapshotToPreserve,
+                options: targetDecision?.options || plan.options,
+                previousSelection: plan.currentSelection || plan.location,
+                currentSelection: winningSug.title,
+                location:
+                  plan.category.toLowerCase().includes('location') || plan.title.toLowerCase().includes('location')
+                    ? winningSug.title
+                    : plan.location,
+                imageUrl: winningSug.imageUrl || plan.imageUrl,
+                imagePosition: winningSug.imagePosition || plan.imagePosition,
+                images: winningSug.images || (winningSug.imageUrl ? [{ id: 'img-main', url: winningSug.imageUrl, position: winningSug.imagePosition }] : plan.images),
+                ideaDesc: winningSug.description || plan.ideaDesc,
+                description: winningSug.description || plan.description,
+                infoValue: `${winningSug.title} - ${winningSug.description}`,
+                finalDecision: `${winningSug.title} — ${leader.voteCount} ${leader.voteCount === 1 ? 'vote' : 'votes'} (Voted Choice)`,
+                status: 'confirmed' as const,
+                isSelectedWinner: true,
+                appliedSuggestionId: winningSug.id,
+                decidedSource: 'voting' as const,
+                decidedAt: new Date().toISOString(),
+                isReopened: false,
+              };
+            }
+
+            // Normal voting option without a suggestion
             return {
               ...plan,
               options: targetDecision?.options || plan.options,
@@ -368,6 +457,9 @@ export default function App() {
               status: 'confirmed' as const,
               decidedSource: 'voting' as const,
               decidedAt: new Date().toISOString(),
+              appliedSuggestionId: undefined,
+              isSelectedWinner: false,
+              isReopened: false,
               location:
                 plan.category.toLowerCase().includes('location') || plan.title.toLowerCase().includes('location')
                   ? leader.label
@@ -376,23 +468,17 @@ export default function App() {
           }
 
           const isFinalized = plan.status === 'confirmed' && !!plan.finalDecision;
+          // While voting is still active and ongoing, retain the base selection;
+          // Plan only updates to the new winner after the round is concluded.
           const currentVal = isFinalized
             ? plan.currentSelection
-            : leader && leader.voteCount > 0
-            ? leader.label
-            : plan.initialSelection || plan.currentSelection;
+            : plan.initialSelection || plan.previousSelection || plan.currentSelection;
 
           return {
             ...plan,
             options: targetDecision?.options || plan.options,
             currentSelection: currentVal,
-            location:
-              (plan.category.toLowerCase().includes('location') || plan.title.toLowerCase().includes('location')) &&
-              !isFinalized &&
-              leader &&
-              leader.voteCount > 0
-                ? leader.label
-                : plan.location,
+            location: isFinalized ? plan.location : (plan.initialSelection || plan.previousSelection || plan.location),
           };
         }
         return plan;
@@ -402,24 +488,80 @@ export default function App() {
         ...prev,
         decisions: updatedDecisions,
         plans: updatedPlans,
+        suggestions: updatedSuggestions,
       };
     });
 
     addActivity(`voted in a group decision`, '🗳️');
   };
 
-  // 2. Finalize Decision (Owner Privilege)
+  // 2. Finalize Decision (or Toggle/Undo if already finalized)
   const handleFinalizeDecision = (decisionId: string, optionId: string) => {
+    if (currentPersona.role !== 'owner' && currentPersona.role !== 'admin') return;
+
     const currentDec = board.decisions.find((d) => d.id === decisionId);
     const selectedOption = currentDec?.options.find((o) => o.id === optionId);
     if (!currentDec || !selectedOption) return;
+
+    // Check if this decision is already finalized with this option -> Undo finalization
+    const isAlreadyFinalized = currentDec.status === 'completed' && currentDec.finalDecision?.includes(selectedOption.label);
+
+    if (isAlreadyFinalized) {
+      setBoard((prev) => {
+        const decision = prev.decisions.find((d) => d.id === decisionId);
+        if (!decision) return prev;
+
+        const updatedDecisions = prev.decisions.map((d) => {
+          if (d.id !== decisionId) return d;
+          return {
+            ...d,
+            status: 'open' as const,
+            finalDecision: undefined,
+          };
+        });
+
+        // Revert matching plan back to active
+        const updatedPlans = prev.plans.map((plan) => {
+          if (isPlanMatchingItem(plan, decision)) {
+            return {
+              ...plan,
+              status: 'active' as const,
+              finalDecision: undefined,
+              currentSelection: plan.previousSelection || plan.initialSelection || plan.options?.[0]?.label || '',
+              decidedSource: undefined,
+              appliedSuggestionId: undefined,
+              isSelectedWinner: false,
+            };
+          }
+          return plan;
+        });
+
+        const matchingPlan = prev.plans.find((p) => isPlanMatchingItem(p, decision));
+        const updatedSuggestions = prev.suggestions.map((s) => {
+          if (matchingPlan && (s.planId === matchingPlan.id || isPlanMatchingItem(matchingPlan, s))) {
+            return { ...s, isSelectedWinner: false, status: 'open' as const };
+          }
+          return s;
+        });
+
+        return {
+          ...prev,
+          decisions: updatedDecisions,
+          plans: updatedPlans,
+          suggestions: updatedSuggestions,
+        };
+      });
+
+      addActivity(`reverted finalization for "${selectedOption.label}"`, '↩️');
+      return;
+    }
 
     setBoard((prev) => {
       const decision = prev.decisions.find((d) => d.id === decisionId);
       const option = decision?.options.find((o) => o.id === optionId) || selectedOption;
       if (!decision || !option) return prev;
 
-      const finalizedText = `${option.label} ✓ (Selected by ${currentPersona.name})`;
+      const finalizedText = `${option.label} ✓ (Selected by ${effectivePersona.name})`;
 
       const updatedDecisions = prev.decisions.map((d) => {
         if (d.id !== decisionId) return d;
@@ -430,9 +572,74 @@ export default function App() {
         };
       });
 
+      const matchingPlan = prev.plans.find((p) => isPlanMatchingItem(p, decision));
+      const winningSug = prev.suggestions.find(
+        (s) =>
+          s.id === option.id.replace(/^opt-/, '') ||
+          (option as any).suggestionId === s.id ||
+          (matchingPlan && (s.planId === matchingPlan.id || isPlanMatchingItem(matchingPlan, s)) && s.title.trim().toLowerCase() === option.label.trim().toLowerCase())
+      );
+
+      let updatedSuggestions = [...prev.suggestions];
+      if (winningSug) {
+        updatedSuggestions = updatedSuggestions.map((s) => {
+          if (s.id === winningSug.id) {
+            return { ...s, isSelectedWinner: true, status: 'fixed' as const };
+          }
+          if (matchingPlan && (s.planId === matchingPlan.id || isPlanMatchingItem(matchingPlan, s))) {
+            return { ...s, isSelectedWinner: false, status: 'open' as const };
+          }
+          return s;
+        });
+      }
+
       // SYNC TO PLANS: Update the corresponding AttachedPlan in board.plans immediately!
       const updatedPlans = prev.plans.map((plan) => {
         if (isPlanMatchingItem(plan, decision)) {
+          if (winningSug) {
+            const snapshotToPreserve: PlanSnapshot = plan.previousPlanSnapshot || {
+              currentSelection: plan.currentSelection,
+              initialSelection: plan.initialSelection,
+              previousSelection: plan.previousSelection,
+              location: plan.location,
+              imageUrl: plan.imageUrl,
+              imagePosition: plan.imagePosition,
+              images: plan.images,
+              ideaDesc: plan.ideaDesc,
+              description: plan.description,
+              infoValue: plan.infoValue,
+              finalDecision: plan.finalDecision,
+              status: plan.status,
+              isSelectedWinner: plan.isSelectedWinner,
+              decidedSource: plan.decidedSource,
+              decidedAt: plan.decidedAt,
+            };
+
+            return {
+              ...plan,
+              previousPlanSnapshot: snapshotToPreserve,
+              previousSelection: plan.currentSelection || plan.location || plan.infoValue,
+              currentSelection: winningSug.title,
+              finalDecision: finalizedText,
+              status: 'confirmed' as const,
+              decidedSource: 'voting' as const,
+              decidedAt: 'Just now',
+              location:
+                plan.category.toLowerCase().includes('location') || plan.title.toLowerCase().includes('location')
+                  ? winningSug.title
+                  : plan.location,
+              imageUrl: winningSug.imageUrl || plan.imageUrl,
+              imagePosition: winningSug.imagePosition || plan.imagePosition,
+              images: winningSug.images || (winningSug.imageUrl ? [{ id: 'img-main', url: winningSug.imageUrl, position: winningSug.imagePosition }] : plan.images),
+              ideaDesc: winningSug.description || plan.ideaDesc,
+              description: winningSug.description || plan.description,
+              infoValue: `${winningSug.title} - ${winningSug.description}`,
+              appliedSuggestionId: winningSug.id,
+              isSelectedWinner: true,
+              options: decision.options,
+            };
+          }
+
           return {
             ...plan,
             previousSelection: plan.currentSelection || plan.location || plan.infoValue,
@@ -445,6 +652,8 @@ export default function App() {
               plan.category.toLowerCase().includes('location') || plan.title.toLowerCase().includes('location')
                 ? option.label
                 : plan.location,
+            appliedSuggestionId: undefined,
+            isSelectedWinner: false,
             options: decision.options,
           };
         }
@@ -455,6 +664,7 @@ export default function App() {
         ...prev,
         decisions: updatedDecisions,
         plans: updatedPlans,
+        suggestions: updatedSuggestions,
       };
     });
 
@@ -490,17 +700,33 @@ export default function App() {
       // SYNC TO PLANS: Revert matching plan immediately!
       const updatedPlans = prev.plans.map((plan) => {
         if (decision && isPlanMatchingItem(plan, decision)) {
-          const revertedSelection = plan.initialSelection || plan.previousSelection || plan.options?.[0]?.label || '';
+          const snapshot = plan.previousPlanSnapshot;
+          const revertedSelection = snapshot?.currentSelection || plan.initialSelection || plan.previousSelection || plan.options?.[0]?.label || '';
+          const revertedLocation = snapshot?.location || plan.initialSelection || plan.previousSelection || 'Landmark Beach Private Cabana #4';
+          const revertedImageUrl = snapshot ? snapshot.imageUrl : plan.imageUrl;
+          const revertedImagePosition = snapshot ? snapshot.imagePosition : plan.imagePosition;
+          const revertedImages = snapshot ? snapshot.images : plan.images;
+          const revertedDescription = snapshot ? snapshot.description : plan.description;
+          const revertedIdeaDesc = snapshot ? snapshot.ideaDesc : plan.ideaDesc;
+          const revertedInfoValue = snapshot ? snapshot.infoValue : plan.infoValue;
+
           return {
             ...plan,
             status: 'active' as const,
             finalDecision: undefined,
             currentSelection: revertedSelection,
             isSelectedWinner: false,
+            appliedSuggestionId: undefined,
             decidedSource: undefined,
             isReopened: true,
             reopenedAt: new Date().toISOString(),
             decisionRound: nextRound,
+            imageUrl: revertedImageUrl,
+            imagePosition: revertedImagePosition,
+            images: revertedImages,
+            description: revertedDescription,
+            ideaDesc: revertedIdeaDesc,
+            infoValue: revertedInfoValue,
             options: plan.options?.map((opt) => ({
               ...opt,
               voteCount: 0,
@@ -508,21 +734,32 @@ export default function App() {
             })),
             location:
               plan.category.toLowerCase().includes('location') || plan.title.toLowerCase().includes('location')
-                ? plan.initialSelection || plan.previousSelection || 'Landmark Beach Private Cabana #4'
+                ? revertedLocation
                 : plan.location,
           };
         }
         return plan;
       });
 
+      const matchingPlan = prev.plans.find((p) => decision && isPlanMatchingItem(p, decision));
+      const updatedSuggestions = prev.suggestions.map((s) => {
+        if (matchingPlan && (s.planId === matchingPlan.id || isPlanMatchingItem(matchingPlan, s))) {
+          return { ...s, isSelectedWinner: false, status: 'open' as const };
+        }
+        return s;
+      });
+
       return {
         ...prev,
         decisions: updatedDecisions,
         plans: updatedPlans,
+        suggestions: updatedSuggestions,
       };
     });
 
-    addActivity(`reopened group vote for Round 2 🔄`, '🔄');
+    const targetDec = board.decisions.find((d) => d.id === decisionId);
+    const roundNumber = (targetDec?.decisionRound || 1) + 1;
+    addActivity(`reopened group vote for Round ${roundNumber} 🔄`, '🔄');
   };
 
   // 4. Toggle Heart on Suggestion
@@ -660,7 +897,7 @@ export default function App() {
           ideaDesc: target.description || p.ideaDesc,
           description: target.description || p.description,
           infoValue: `${target.title} - ${target.description}`,
-          finalDecision: `${target.title} ✓ (Selected by ${currentPersona.name})`,
+          finalDecision: `${target.title} ✓ (Selected by ${effectivePersona.name})`,
           status: 'confirmed' as const,
           isSelectedWinner: true,
           decidedSource: 'suggestion' as const,
@@ -681,19 +918,22 @@ export default function App() {
           return {
             ...i,
             value: `${target.title} - ${target.description}`,
-            fixedBy: currentPersona.name,
+            fixedBy: effectivePersona.name,
           };
         }
         return i;
       });
 
       // 4. Update decision finalDecision if applicable
+      const matchingPlan = prev.plans.find((p) => p.id === target.planId || isPlanMatchingItem(p, target));
       const updatedDecisions = prev.decisions.map((d) => {
-        if (
+        const matchesDecision =
           d.deciderItemId === target.planId ||
           d.id === `dec-${target.planId}` ||
-          (target.planId && d.planId === target.planId)
-        ) {
+          (target.planId && d.planId === target.planId) ||
+          (matchingPlan && isPlanMatchingItem(matchingPlan, d));
+
+        if (matchesDecision) {
           if (isUndoing) {
             return {
               ...d,
@@ -704,7 +944,7 @@ export default function App() {
           return {
             ...d,
             status: 'completed' as const,
-            finalDecision: `${target.title} ✓ (Selected from suggestions)`,
+            finalDecision: `${target.title} ✓ (Selected by ${effectivePersona.name})`,
           };
         }
         return d;
@@ -749,31 +989,38 @@ export default function App() {
       );
 
       let updatedDecisions = [...prev.decisions];
+      const planMatch = prev.plans.find((p) => p.id === sug.planId || isPlanMatchingItem(p, sug));
+      const targetTitle = sug.planTitle || planMatch?.title || 'Plan';
+
+      const newOpt: DecisionOption = {
+        id: `opt-${sug.id}`,
+        label: sug.title,
+        emoji: sug.planEmoji || '💡',
+        voteCount: 0,
+        voterIds: [],
+        suggestionId: sug.id,
+      };
 
       if (willBePutUp) {
         // Find matching decision for this plan
-        const planMatch = prev.plans.find((p) => p.id === sug.planId);
-        const targetTitle = sug.planTitle || planMatch?.title || 'Plan';
         const existingDecIndex = updatedDecisions.findIndex(
-          (d) => d.deciderItemId === sug.planId || d.id === `dec-${sug.planId}` || d.title.toLowerCase().includes(targetTitle.toLowerCase())
+          (d) =>
+            d.deciderItemId === sug.planId ||
+            d.id === `dec-${sug.planId}` ||
+            (planMatch && isPlanMatchingItem(planMatch, d)) ||
+            d.title.toLowerCase().includes(targetTitle.toLowerCase())
         );
-
-        const newOpt = {
-          id: `opt-${sug.id}`,
-          label: sug.title,
-          emoji: sug.planEmoji || '💡',
-          voteCount: 0,
-          voterIds: [],
-        };
 
         if (existingDecIndex >= 0) {
           const existingDec = updatedDecisions[existingDecIndex];
-          if (!existingDec.options.some((o) => o.id === newOpt.id || o.label.toLowerCase() === newOpt.label.toLowerCase())) {
-            updatedDecisions[existingDecIndex] = {
-              ...existingDec,
-              options: [...existingDec.options, newOpt],
-            };
-          }
+          const hasOption = existingDec.options.some((o) => o.id === newOpt.id || o.label.toLowerCase() === newOpt.label.toLowerCase());
+          const updatedOptions = hasOption ? existingDec.options : [...existingDec.options, newOpt];
+          updatedDecisions[existingDecIndex] = {
+            ...existingDec,
+            options: updatedOptions,
+            status: 'open',
+            finalDecision: undefined,
+          };
         } else {
           // Create a new decision for this plan's votes
           updatedDecisions.push({
@@ -783,7 +1030,7 @@ export default function App() {
             category: `🗳️ ${targetTitle.toUpperCase()}`,
             question: `Vote on ${targetTitle} options`,
             options: [newOpt],
-            totalVotesNeeded: 10,
+            totalVotesNeeded: prev.members?.length > 0 ? prev.members.length : 1,
             deadlineText: 'Open for group vote',
             priority: 'required',
             status: 'open',
@@ -799,10 +1046,26 @@ export default function App() {
         }));
       }
 
+      // Sync plan options
+      const updatedPlans = prev.plans.map((p) => {
+        if (p.id === sug.planId || isPlanMatchingItem(p, sug)) {
+          const existingOpts = p.options || [];
+          if (willBePutUp) {
+            if (!existingOpts.some((o) => o.id === newOpt.id || o.label.toLowerCase() === newOpt.label.toLowerCase())) {
+              return { ...p, options: [...existingOpts, newOpt] };
+            }
+          } else {
+            return { ...p, options: existingOpts.filter((o) => o.id !== `opt-${sug.id}` && o.label !== sug.title) };
+          }
+        }
+        return p;
+      });
+
       return {
         ...prev,
         suggestions: updatedSuggestions,
         decisions: updatedDecisions,
+        plans: updatedPlans,
       };
     });
 
@@ -923,7 +1186,8 @@ export default function App() {
     imageUrl: string;
     imagePosition?: ImagePosition;
     images?: SuggestionImageItem[];
-    priority: ItemPriority;
+    priority?: ItemPriority;
+    link?: string;
   }) => {
     const images = newSugData.images && newSugData.images.length > 0
       ? newSugData.images
@@ -946,16 +1210,17 @@ export default function App() {
       imagePosition: images[0].position || newSugData.imagePosition,
       images: images,
       authorId: currentPersona.id,
-      authorName: currentPersona.name,
+      authorName: effectivePersona.name,
       heartCount: 1,
       heartedByMemberIds: [currentPersona.id],
       isSelectedWinner: false,
       isPutUpForVote: false,
       status: 'open',
-      priority: newSugData.priority,
+      priority: newSugData.priority || 'required',
       planId: newSugData.planId,
       planTitle: newSugData.planTitle,
       planEmoji: newSugData.planEmoji,
+      link: newSugData.link ? newSugData.link.trim() : undefined,
     };
 
     setBoard((prev) => ({
@@ -1012,7 +1277,7 @@ export default function App() {
   // 7. Volunteer for Task
   const handleVolunteerForTask = (taskId: string, customAssigneeId?: string, customAssigneeName?: string) => {
     const assigneeId = customAssigneeId || currentPersona.id;
-    const assigneeName = customAssigneeName || currentPersona.name;
+    const assigneeName = customAssigneeName || effectivePersona.name;
 
     setBoard((prev) => {
       const targetTask = prev.tasks.find((t) => t.id === taskId);
@@ -1148,7 +1413,7 @@ export default function App() {
               { id: `opt-${newPlan.id}-0`, label: 'Option 1', emoji: '🔘', voteCount: 0, voterIds: [] },
               { id: `opt-${newPlan.id}-1`, label: 'Option 2', emoji: '🔘', voteCount: 0, voterIds: [] },
             ],
-            totalVotesNeeded: newPlan.totalVotesNeeded || 8,
+            totalVotesNeeded: prev.members?.length > 0 ? prev.members.length : 1,
             createdBy: currentPersona.name,
             deciderItemId: newPlan.id,
           });
@@ -1395,7 +1660,7 @@ export default function App() {
             statusOptionId: optionId,
             statusLabel: option?.label || optionId,
             updatedAt: 'Just now',
-            updatedBy: currentPersona.name,
+            updatedBy: effectivePersona.name,
           };
 
           const newStatuses = {
@@ -1558,7 +1823,7 @@ export default function App() {
           finalDecision: undefined,
           decidedSource: undefined,
           decidedAt: undefined,
-          currentSelection: p.initialSelection || p.spinnerOptions?.[0] || '',
+          currentSelection: p.deciderType === 'blind_pick' ? '' : (p.initialSelection || p.spinnerOptions?.[0] || ''),
         };
       });
 
@@ -1568,9 +1833,11 @@ export default function App() {
             ...d,
             status: 'open' as const,
             finalDecision: undefined,
+            winningOption: undefined,
             isReopened: true,
             reopenedAt: new Date().toISOString(),
             decisionRound: nextRound,
+            votes: {},
           };
         }
         return d;
@@ -1712,7 +1979,7 @@ export default function App() {
             { id: `opt-${p.id}-0`, label: 'Option 1', emoji: '🔘', voteCount: 0, voterIds: [] },
             { id: `opt-${p.id}-1`, label: 'Option 2', emoji: '🔘', voteCount: 0, voterIds: [] },
           ],
-          totalVotesNeeded: 8,
+          totalVotesNeeded: 1,
           createdBy: currentPersona.name,
           deciderItemId: p.id,
         });
@@ -1766,6 +2033,10 @@ export default function App() {
       || plansToAttach.find((p) => p.date || p.time || p.dateTime);
     const hasStructuredTime = Boolean(planWithSchedule?.time && planWithSchedule.hasSpecificTime !== false);
 
+    const finalCreatorName = (newBoardData.creatorCustomName && newBoardData.creatorCustomName.trim()) 
+      || currentPersona.name;
+    const finalCreatorAvatar = newBoardData.creatorCustomAvatar || currentPersona.avatar;
+
     const newBoard: PlanBoard = {
       id: `board-${Date.now()}`,
       title: newBoardData.title || 'Our New Plan',
@@ -1781,29 +2052,34 @@ export default function App() {
       endDateTime: undefined,
       state: 'new',
       ownerId: currentPersona.id,
-      ownerName: currentPersona.name,
+      ownerName: finalCreatorName,
       description: newBoardData.description || 'A collaborative plan built by friends.',
       plans: plansToAttach,
+      creatorCustomIdentity: {
+        useCustomName: Boolean(newBoardData.useCustomName),
+        displayName: finalCreatorName,
+        avatar: finalCreatorAvatar,
+      },
       members: [
         {
           id: currentPersona.id,
-          name: currentPersona.name,
-          avatar: currentPersona.avatar,
+          name: finalCreatorName,
+          avatar: finalCreatorAvatar,
           role: 'owner',
           responsibility: 'Plan Creator & Host',
         },
       ],
-      decisions: initialDecisions,
-      suggestions: initialSuggestions,
+      decisions: initialDecisions.map((d) => ({ ...d, createdBy: finalCreatorName })),
+      suggestions: initialSuggestions.map((s) => ({ ...s, authorName: finalCreatorName })),
       tasks: initialTasks,
       contributions: [],
-      information: initialInfo,
+      information: initialInfo.map((i) => ({ ...i, fixedBy: finalCreatorName })),
       timeline: [],
       recentActivities: [
         {
           id: `act-${Date.now()}`,
-          actorName: currentPersona.name,
-          actorAvatar: currentPersona.avatar,
+          actorName: finalCreatorName,
+          actorAvatar: finalCreatorAvatar,
           actionText: `created the plan board: ${newBoardData.title || 'Our New Plan'} with ${plansToAttach.length} plan(s) ✨`,
           timeAgo: 'Just now',
           badgeEmoji: '✨',
@@ -1845,11 +2121,12 @@ export default function App() {
   };
 
   // 14. Guest Join Flow Simulation
-  const handleJoinAsGuest = (name: string) => {
+  const handleJoinAsGuest = (name: string, avatar?: string) => {
+    const finalAvatar = avatar || BOARD_AVATARS[0]?.url || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Friend';
     const newGuestPersona: UserPersona = {
       id: `user-guest-${Date.now()}`,
       name,
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      avatar: finalAvatar,
       role: 'member',
       isGuest: true,
     };
@@ -1857,16 +2134,26 @@ export default function App() {
     lastGuestPersonaRef.current = newGuestPersona;
     handleSelectPersona(newGuestPersona);
 
-    // Add to members list if not present
+    // Add to members list if not present, or update existing with the chosen board-specific avatar
     setBoard((prev) => {
-      const alreadyIn = prev.members.some((m) => m.name.toLowerCase() === name.toLowerCase());
-      if (alreadyIn) return prev;
+      const existingIdx = prev.members.findIndex((m) => m.name.toLowerCase() === name.toLowerCase());
+      if (existingIdx >= 0) {
+        return {
+          ...prev,
+          members: prev.members.map((m, idx) =>
+            idx === existingIdx
+              ? { ...m, avatar: finalAvatar, joinedViaInvite: true }
+              : m
+          ),
+        };
+      }
 
       const newMember: BoardMember = {
         id: newGuestPersona.id,
         name: newGuestPersona.name,
-        avatar: newGuestPersona.avatar,
+        avatar: finalAvatar,
         role: 'member',
+        joinedViaInvite: true,
       };
       return {
         ...prev,
@@ -1874,7 +2161,7 @@ export default function App() {
       };
     });
 
-    addActivity(`${name} joined the plan via shareable link 👋`, '👋');
+    addActivity(`${name} joined the plan with custom avatar 👋`, '👋');
   };
 
   // First Action Completed from Guest Join
@@ -1907,12 +2194,25 @@ export default function App() {
   );
   const userContribution = board.contributions[0];
 
+  // Full-Page Create Plan Board Experience
+  if (isCreatePlanOpen) {
+    return (
+      <CreatePlanModal
+        isOpen={isCreatePlanOpen}
+        onClose={() => setIsCreatePlanOpen(false)}
+        onCreatePlan={handleCreatePlan}
+        currentPersona={currentPersona}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#FFFFFF] flex flex-col selection:bg-amber-100 selection:text-amber-900">
       {/* Simplified Top Navbar: Board Switcher (Left) and Share / Profile (Right) */}
       <Header
         currentBoard={board}
         currentPersona={currentPersona}
+        boardPersona={effectivePersona}
         allPersonas={USER_PERSONAS}
         allBoards={allBoards}
         onSelectBoard={(boardId) => {
@@ -1928,6 +2228,7 @@ export default function App() {
         onOpenCreatePlan={() => setIsCreatePlanOpen(true)}
         onOpenShare={() => setIsShareOpen(true)}
         onOpenJoinFlow={() => setIsJoinFlowOpen(true)}
+        onDeleteBoard={handleDeleteBoard}
       />
 
       {/* Main Board Container with dedicated section views */}
@@ -1946,7 +2247,7 @@ export default function App() {
               {/* Main Board Header Banner */}
               <BoardHeader
                 board={board}
-                currentPersona={currentPersona}
+                currentPersona={effectivePersona}
                 onOpenShare={() => setIsShareOpen(true)}
                 onOpenPeople={() => handleNavigateToSection('people_timeline')}
                 onOpenCreateItem={() => setIsCreateItemOpen(true)}
@@ -1958,28 +2259,6 @@ export default function App() {
                 activeEvolutionDay={activeEvolutionDay}
                 onSelectEvolutionDay={handleSelectEvolutionDay}
               />
-
-              {/* Personalized "YOUR PART" Section */}
-              <YourPartSection
-                currentPersona={currentPersona}
-                pendingDecisions={pendingDecisionsForUser}
-                userResponsibilities={userResponsibilities}
-                userContribution={userContribution}
-                onQuickVote={handleVote}
-                onToggleTaskComplete={handleToggleTaskComplete}
-                onTogglePaymentPaid={handleTogglePaymentPaid}
-                onScrollToSection={handleScrollToSection}
-              />
-
-              {/* Needs Attention Quick Triage */}
-              {activeEvolutionDay !== 'day5' && (
-                <NeedsAttentionSection
-                  board={board}
-                  onSelectDecision={() => handleNavigateToSection('decisions')}
-                  onSelectTask={() => handleNavigateToSection('people_timeline')}
-                  onSelectContribution={() => handleNavigateToSection('people_timeline')}
-                />
-              )}
 
               {/* Activity Feed & WhatsApp Integration Card */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -2029,7 +2308,7 @@ export default function App() {
             >
               <BoardPlansSection
                 board={board}
-                currentPersona={currentPersona}
+                currentPersona={effectivePersona}
                 onAddPlan={handleAddPlan}
                 onEditPlan={handleEditPlan}
                 onRemovePlan={handleRemovePlan}
@@ -2054,7 +2333,7 @@ export default function App() {
                 decisions={board.decisions}
                 plans={board.plans}
                 tasks={board.tasks}
-                currentPersona={currentPersona}
+                currentPersona={effectivePersona}
                 allMembers={board.members}
                 onVote={handleVote}
                 onFinalizeDecision={handleFinalizeDecision}
@@ -2067,6 +2346,7 @@ export default function App() {
                 onVolunteerForTask={handleVolunteerForTask}
                 onToggleTaskComplete={handleToggleTaskComplete}
                 onOpenCreateItem={() => setIsCreateItemOpen(true)}
+                onRemovePlan={handleRemovePlan}
               />
             </motion.div>
           )}
@@ -2084,7 +2364,7 @@ export default function App() {
               <SuggestionsSection
                 suggestions={board.suggestions}
                 plans={board.plans}
-                currentPersona={currentPersona}
+                currentPersona={effectivePersona}
                 onToggleHeart={handleToggleHeart}
                 onSelectAsWinner={handleSelectAsWinner}
                 onTogglePutUpForVote={handleTogglePutUpForVote}
@@ -2108,77 +2388,46 @@ export default function App() {
               transition={{ duration: 0.18 }}
               className="space-y-6"
             >
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Main Column (2 cols): Contributions & Tasks, and Day-of Timeline */}
-                <div className="lg:col-span-2 space-y-8">
-                  <ContributionsSection
-                    tasks={board.tasks}
-                    contributions={board.contributions}
-                    currentPersona={currentPersona}
-                    allMembers={board.members}
-                    onToggleTaskComplete={handleToggleTaskComplete}
-                    onVolunteerForTask={handleVolunteerForTask}
-                    onTogglePaymentPaid={handleTogglePaymentPaid}
-                    onOpenCreateItem={() => setIsCreateItemOpen(true)}
-                  />
+              <div className="space-y-8">
+                {/* 1. People / Participants Section */}
+                <PeopleSection
+                  members={board.members}
+                  currentPersona={effectivePersona}
+                  onUpdateMemberRole={handleUpdateMemberRole}
+                  onAssignResponsibility={handleAssignResponsibility}
+                  onOpenShare={() => setIsShareOpen(true)}
+                />
 
-                  {/* Participant Status Check-ins */}
-                  <ParticipantStatusSection
-                    plans={board.plans}
-                    members={board.members}
-                    currentPersona={currentPersona}
-                    onUpdateStatus={handleUpdateParticipantStatus}
-                    onOpenAddPlan={() => {
-                      handleNavigateToSection('plan');
-                      setIsAddPlanModalOpen(true);
-                    }}
-                  />
+                {/* 2. Participant Status & Check-ins */}
+                <ParticipantStatusSection
+                  plans={board.plans}
+                  members={board.members}
+                  currentPersona={effectivePersona}
+                  onUpdateStatus={handleUpdateParticipantStatus}
+                  onOpenAddPlan={() => {
+                    handleNavigateToSection('plan');
+                    setIsAddPlanModalOpen(true);
+                  }}
+                />
 
-                  <TimelineSection
-                    timeline={board.timeline}
-                    currentPersona={currentPersona}
-                    onAddTimelineEntry={handleAddTimelineEntry}
-                  />
-                </div>
+                {/* 3. Responsibilities & Money Pool */}
+                <ContributionsSection
+                  tasks={board.tasks}
+                  contributions={board.contributions}
+                  currentPersona={effectivePersona}
+                  allMembers={board.members}
+                  onToggleTaskComplete={handleToggleTaskComplete}
+                  onVolunteerForTask={handleVolunteerForTask}
+                  onTogglePaymentPaid={handleTogglePaymentPaid}
+                  onOpenCreateItem={() => setIsCreateItemOpen(true)}
+                />
 
-                {/* Right Sidebar (1 col): People & Roles + Activity */}
-                <div className="space-y-8">
-                  <PeopleSection
-                    members={board.members}
-                    currentPersona={currentPersona}
-                    onUpdateMemberRole={handleUpdateMemberRole}
-                    onAssignResponsibility={handleAssignResponsibility}
-                    onOpenShare={() => setIsShareOpen(true)}
-                  />
-
-                  <ActivityFeed activities={board.recentActivities} />
-
-                  <div className="bg-[#EFEAE2] rounded-3xl p-5 border border-[#DFE1E6] shadow-xs">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold">
-                        💬
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-black text-[#1A1B25] uppercase tracking-wider">
-                          WhatsApp + Plan Board
-                        </h4>
-                        <p className="text-[11px] text-[#666D80]">
-                          Chat stays the conversation · Board is the source of truth
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-[#353849] mb-3 leading-relaxed">
-                      When friends in the group chat ask <em>"What time are we leaving again?"</em> or <em>"Where are we going?"</em>, you don't scroll through 400 messages. Just share the board link.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setIsShareOpen(true)}
-                      className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition cursor-pointer shadow-xs"
-                    >
-                      Copy WhatsApp Plan Invite
-                    </button>
-                  </div>
-                </div>
+                {/* 4. Timeline & Itinerary Section */}
+                <TimelineSection
+                  timeline={board.timeline}
+                  currentPersona={effectivePersona}
+                  onAddTimelineEntry={handleAddTimelineEntry}
+                />
               </div>
             </motion.div>
           )}
@@ -2221,17 +2470,10 @@ export default function App() {
         }}
       />
 
-      <CreatePlanModal
-        isOpen={isCreatePlanOpen}
-        onClose={() => setIsCreatePlanOpen(false)}
-        onCreatePlan={handleCreatePlan}
-        currentPersona={currentPersona}
-      />
-
       <CreateItemModal
         isOpen={isCreateItemOpen}
         onClose={() => setIsCreateItemOpen(false)}
-        currentPersona={currentPersona}
+        currentPersona={effectivePersona}
         plans={board.plans}
         onAddItem={handleAddItem}
       />
@@ -2245,7 +2487,7 @@ export default function App() {
           }}
           plans={board.plans}
           preselectedPlanId={preselectedPlanIdForSuggestion}
-          currentPersona={currentPersona}
+          currentPersona={effectivePersona}
           onAddSuggestion={handleAddSuggestion}
         />
       )}
@@ -2263,7 +2505,10 @@ export default function App() {
             saveActiveBoardId(boardId);
           }
         }}
-        onOpenCreatePlan={() => setIsCreatePlanOpen(true)}
+        onOpenCreatePlan={() => {
+          setIsMyPlansOpen(false);
+          setIsCreatePlanOpen(true);
+        }}
         onDeleteBoard={handleDeleteBoard}
         currentPersona={currentPersona}
       />
