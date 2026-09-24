@@ -226,7 +226,7 @@ export const SuggestionsSection: React.FC<SuggestionsSectionProps> = ({
       {/* Top Header */}
       <div className="flex items-center justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-xl sm:text-[22px] font-bold text-[#1A1B25] tracking-tight">
+          <h2 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight">
             Visual Suggestions
           </h2>
           <p className="text-xs sm:text-sm text-[#808897] mt-1 font-normal">

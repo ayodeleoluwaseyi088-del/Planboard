@@ -207,7 +207,7 @@ export const SuggestVisualIdeaPage: React.FC<SuggestVisualIdeaPageProps> = ({
         <div className="flex items-center justify-between mb-5 sm:mb-6">
           <h1 
             id="suggest-visual-idea-heading"
-            className="text-xl sm:text-2xl font-black text-[#1A1B25] tracking-tight select-none"
+            className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight leading-tight select-none"
           >
             Suggest a Visual Idea
           </h1>

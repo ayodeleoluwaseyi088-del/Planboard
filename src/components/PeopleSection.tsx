@@ -4,7 +4,8 @@ import {
   UserPlus, 
   Search, 
   ChevronDown, 
-  Check 
+  Check,
+  Users
 } from 'lucide-react';
 import { BoardMember, UserPersona, MemberRole } from '../types';
 
@@ -71,7 +72,7 @@ export const PeopleSection: React.FC<PeopleSectionProps> = ({
       {/* Section Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-[#1A1B25]">
+          <h2 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight leading-tight">
             Participants ({members.length})
           </h2>
           <p className="text-xs sm:text-sm text-[#808897] mt-0.5">
@@ -89,8 +90,27 @@ export const PeopleSection: React.FC<PeopleSectionProps> = ({
         </button>
       </div>
 
-      {/* Main Card Container */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#F6F8FA] shadow-[3px_4px_20px_0px_#ECEFF3]">
+      {/* Main Content */}
+      {members.length === 0 ? (
+        <div className="w-full py-16 sm:py-24 flex flex-col items-center justify-center text-center select-none">
+          <Users className="w-9 h-9 text-[#272835] stroke-[2.2] mb-4" />
+          <h3 className="text-xl sm:text-2xl font-bold text-[#272835] tracking-tight leading-snug mb-2">
+            No participants yet
+          </h3>
+          <p className="text-sm sm:text-base text-[#808897] font-normal tracking-normal max-w-lg leading-relaxed">
+            Invite friends and collaborators so they can join the board and participate
+          </p>
+          <button
+            type="button"
+            onClick={onOpenShare}
+            className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white text-sm font-bold transition cursor-pointer shadow-xs active:scale-95"
+          >
+            <UserPlus className="w-4 h-4 stroke-[2.5]" />
+            <span>Invite Friends</span>
+          </button>
+        </div>
+      ) : (
+        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#F6F8FA] shadow-[3px_4px_20px_0px_#ECEFF3]">
         {/* Search Bar */}
         <div className="relative mb-4">
           <Search className="w-4 h-4 text-[#808897] absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -114,7 +134,8 @@ export const PeopleSection: React.FC<PeopleSectionProps> = ({
             return (
               <div
                 key={member.id}
-                className="py-3 sm:py-3.5 flex items-center justify-between gap-3"
+                id={`member-${member.id}`}
+                className="py-3 sm:py-3.5 flex items-center justify-between gap-3 scroll-mt-24 transition-colors"
               >
                 {/* Left: Avatar & Names */}
                 <div className="flex items-center gap-3 min-w-0">
@@ -263,12 +284,19 @@ export const PeopleSection: React.FC<PeopleSectionProps> = ({
           })}
 
           {filteredMembers.length === 0 && (
-            <div className="py-8 text-center text-xs text-[#808897]">
-              No participants matching "{searchQuery}"
+            <div className="w-full py-12 flex flex-col items-center justify-center text-center select-none">
+              <Search className="w-8 h-8 text-[#272835] stroke-[2.2] mb-3" />
+              <h4 className="text-base sm:text-lg font-bold text-[#272835] tracking-tight leading-snug mb-1">
+                No participants matching &quot;{searchQuery}&quot;
+              </h4>
+              <p className="text-xs sm:text-sm text-[#808897] font-normal max-w-sm">
+                Try searching for another name or duty
+              </p>
             </div>
           )}
         </div>
       </div>
+      )}
     </section>
   );
 };

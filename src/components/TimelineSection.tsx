@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MapPin, Plus } from 'lucide-react';
+import { MapPin, Plus, Clock } from 'lucide-react';
 import { TimelineEntry, UserPersona } from '../types';
 
 interface TimelineSectionProps {
@@ -41,7 +41,7 @@ export const TimelineSection: React.FC<TimelineSectionProps> = ({
       {/* Section Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-[#1A1B25]">
+          <h2 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight leading-tight">
             Timeline & Itinerary
           </h2>
           <p className="text-xs sm:text-sm text-[#808897] mt-0.5">
@@ -105,41 +105,57 @@ export const TimelineSection: React.FC<TimelineSectionProps> = ({
         </form>
       )}
 
-      {/* Main Timeline Card Container */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#F6F8FA] shadow-[3px_4px_20px_0px_#ECEFF3] divide-y divide-[#ECEFF3]">
-        {timeline.map((item, idx) => (
-          <div key={item.id} className="py-3.5 flex items-start justify-between gap-3 first:pt-0 last:pb-0">
-            <div className="flex items-start gap-3 min-w-0">
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#F8F9FB] border border-[#DFE1E6] text-[#1A1B25] shrink-0 mt-0.5">
-                {item.time}
-              </span>
-              <div className="min-w-0">
-                <h4 className="text-sm font-bold text-[#1A1B25]">
-                  {item.title}
-                </h4>
-                {item.details && (
-                  <p className="text-xs text-[#808897] mt-0.5">
-                    {item.details}
-                  </p>
-                )}
+      {/* Main Timeline Content */}
+      {timeline.length === 0 ? (
+        <div className="w-full py-16 sm:py-24 flex flex-col items-center justify-center text-center select-none">
+          <Clock className="w-9 h-9 text-[#272835] stroke-[2.2] mb-4" />
+          <h3 className="text-xl sm:text-2xl font-bold text-[#272835] tracking-tight leading-snug mb-2">
+            No itinerary items yet
+          </h3>
+          <p className="text-sm sm:text-base text-[#808897] font-normal tracking-normal max-w-lg leading-relaxed">
+            Add scheduled stops and timings to map out the chronological flow for the event
+          </p>
+          {!showAddForm && (
+            <button
+              type="button"
+              onClick={() => setShowAddForm(true)}
+              className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white text-sm font-bold transition cursor-pointer shadow-xs active:scale-95"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Add Itinerary Stop</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#F6F8FA] shadow-[3px_4px_20px_0px_#ECEFF3] divide-y divide-[#ECEFF3]">
+          {timeline.map((item) => (
+            <div key={item.id} className="py-3.5 flex items-start justify-between gap-3 first:pt-0 last:pb-0">
+              <div className="flex items-start gap-3 min-w-0">
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#F8F9FB] border border-[#DFE1E6] text-[#1A1B25] shrink-0 mt-0.5">
+                  {item.time}
+                </span>
+                <div className="min-w-0">
+                  <h4 className="text-sm font-bold text-[#1A1B25]">
+                    {item.title}
+                  </h4>
+                  {item.details && (
+                    <p className="text-xs text-[#808897] mt-0.5">
+                      {item.details}
+                    </p>
+                  )}
+                </div>
               </div>
+
+              {item.location && (
+                <span className="text-xs text-[#666D80] font-semibold flex items-center gap-1 shrink-0 bg-[#F8F9FB] px-2.5 py-1 rounded-full border border-[#ECEFF3]">
+                  <MapPin className="w-3 h-3 text-[#808897]" />
+                  <span className="hidden sm:inline">{item.location}</span>
+                </span>
+              )}
             </div>
-
-            {item.location && (
-              <span className="text-xs text-[#666D80] font-semibold flex items-center gap-1 shrink-0 bg-[#F8F9FB] px-2.5 py-1 rounded-full border border-[#ECEFF3]">
-                <MapPin className="w-3 h-3 text-[#808897]" />
-                <span className="hidden sm:inline">{item.location}</span>
-              </span>
-            )}
-          </div>
-        ))}
-
-        {timeline.length === 0 && (
-          <div className="py-8 text-center text-xs text-[#808897]">
-            No itinerary items added yet.
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 };

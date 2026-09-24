@@ -3,7 +3,8 @@ import {
   ChevronDown,
   Search,
   Check,
-  Plus
+  Plus,
+  Users
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { AttachedPlan, BoardMember, UserPersona } from '../types';
@@ -60,7 +61,39 @@ export const ParticipantStatusSection: React.FC<ParticipantStatusSectionProps> =
   const selectedPlan = statusPlans.find((p) => p.id === activePlanId) || statusPlans[0];
 
   if (statusPlans.length === 0) {
-    return null;
+    return (
+      <section id="participant-status-section" className="scroll-mt-20">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight leading-tight">
+              Participant Status & Check-ins
+            </h2>
+            <p className="text-xs sm:text-sm text-[#808897] mt-0.5">
+              Automatic roster synced from everyone who joined this board
+            </p>
+          </div>
+        </div>
+        <div className="w-full py-16 sm:py-24 flex flex-col items-center justify-center text-center select-none">
+          <Users className="w-9 h-9 text-[#272835] stroke-[2.2] mb-4" />
+          <h3 className="text-xl sm:text-2xl font-bold text-[#272835] tracking-tight leading-snug mb-2">
+            No status decider yet
+          </h3>
+          <p className="text-sm sm:text-base text-[#808897] font-normal tracking-normal max-w-lg leading-relaxed">
+            Create a plan subject or status decider to track member RSVPs and check-in commitments
+          </p>
+          {isAdminOrOwner && onOpenAddPlan && (
+            <button
+              type="button"
+              onClick={onOpenAddPlan}
+              className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white text-sm font-bold transition cursor-pointer shadow-xs active:scale-95"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Create Status Decider</span>
+            </button>
+          )}
+        </div>
+      </section>
+    );
   }
 
   const options = (selectedPlan.statusOptions && selectedPlan.statusOptions.length > 0)
@@ -130,7 +163,7 @@ export const ParticipantStatusSection: React.FC<ParticipantStatusSectionProps> =
       {/* Section Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-[#1A1B25]">
+          <h2 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight leading-tight">
             Participant Status & Check-ins
           </h2>
           <p className="text-xs sm:text-sm text-[#808897] mt-0.5">
@@ -370,8 +403,14 @@ export const ParticipantStatusSection: React.FC<ParticipantStatusSectionProps> =
           })}
 
           {filteredMembers.length === 0 && (
-            <div className="py-8 text-center text-xs text-[#808897]">
-              No participants found matching &quot;{searchQuery}&quot;
+            <div className="w-full py-12 flex flex-col items-center justify-center text-center select-none">
+              <Search className="w-8 h-8 text-[#272835] stroke-[2.2] mb-3" />
+              <h4 className="text-base sm:text-lg font-bold text-[#272835] tracking-tight leading-snug mb-1">
+                No participants found matching &quot;{searchQuery}&quot;
+              </h4>
+              <p className="text-xs sm:text-sm text-[#808897] font-normal max-w-sm">
+                Try searching for another name or status
+              </p>
             </div>
           )}
         </div>

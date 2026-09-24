@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   CaretDown, 
+  CaretRight,
   ShareFat, 
   User, 
   Plus, 
@@ -14,6 +15,7 @@ import {
   Stack,
   Users
 } from '@phosphor-icons/react';
+import { Pencil } from 'lucide-react';
 import { UserPersona, PlanBoard } from '../types';
 import { getAllStoredBoards } from '../utils/boardStorage';
 
@@ -30,6 +32,10 @@ interface HeaderProps {
   onOpenShare: () => void;
   onOpenJoinFlow: () => void;
   onDeleteBoard?: (boardId: string) => void;
+  onOpenUserProfile?: (persona: UserPersona) => void;
+  onEditBoard?: (board: PlanBoard) => void;
+  onNavigateToOwnerView?: () => void;
+  onNavigateToMemberView?: (memberPersona: UserPersona) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -45,6 +51,10 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenShare,
   onOpenJoinFlow,
   onDeleteBoard,
+  onOpenUserProfile,
+  onEditBoard,
+  onNavigateToOwnerView,
+  onNavigateToMemberView,
 }) => {
   const [isBoardModalOpen, setIsBoardModalOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -248,7 +258,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setIsBoardModalOpen(false)}
             >
               <div
-                className="bg-white w-full max-w-[820px] rounded-[32px] sm:rounded-[36px] p-6 sm:p-8 md:p-9 shadow-2xl relative animate-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]"
+                className="bg-white w-full max-w-[820px] sm:w-[820px] h-[640px] max-h-[calc(100vh-2rem)] rounded-[32px] sm:rounded-[36px] p-6 sm:p-8 md:p-9 shadow-2xl relative animate-in zoom-in-95 duration-150 flex flex-col overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* Top Header: Title + New Board button */}
@@ -326,15 +336,19 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
 
                 {/* Board Cards Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 overflow-y-auto max-h-[50vh] pr-1 pb-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 flex-1 min-h-0 overflow-y-auto pr-1 pb-1 content-start">
                   {filteredBoards.length > 0 ? (
                     filteredBoards.map((b) => {
                       const isSelected = b.id === currentBoard.id;
-                      const isCreator =
+                      const isOwner =
                         b.ownerId === currentPersona.id ||
-                        b.ownerName?.toLowerCase() === currentPersona.name.toLowerCase() ||
-                        b.id === 'board-biggi-birthday' ||
-                        b.ownerId === 'user-seyi';
+                        (Boolean(b.ownerName) && Boolean(currentPersona.name) && b.ownerName.trim().toLowerCase() === currentPersona.name.trim().toLowerCase()) ||
+                        Boolean(b.members?.some(
+                          (m) =>
+                            (m.id === currentPersona.id || (Boolean(m.name) && Boolean(currentPersona.name) && m.name.trim().toLowerCase() === currentPersona.name.trim().toLowerCase())) &&
+                            m.role === 'owner'
+                        ));
+                      const isCreator = isOwner;
                       const isJoined = !isCreator;
                       const planItemsCount = b.plans?.length || 0;
                       const membersCount = b.members?.length || 1;
@@ -355,7 +369,7 @@ export const Header: React.FC<HeaderProps> = ({
                           }`}
                         >
                           <div>
-                            {/* Top row: Emoji, Title, and Delete Icon */}
+                            {/* Top row: Emoji, Title, and Action Buttons (Edit + Delete) */}
                             <div className="flex items-center justify-between gap-3">
                               <div className="flex items-center gap-2.5 min-w-0">
                                 <span className="text-xl sm:text-2xl shrink-0 leading-none" role="img" aria-label="Emoji">
@@ -366,19 +380,39 @@ export const Header: React.FC<HeaderProps> = ({
                                 </h3>
                               </div>
 
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (onDeleteBoard) {
-                                    onDeleteBoard(b.id);
-                                  }
-                                }}
-                                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#F0F2F5] hover:bg-[#FEE2E2] hover:text-rose-600 text-[#808897] flex items-center justify-center transition cursor-pointer shrink-0"
-                                title="Delete board"
-                              >
-                                <Trash size={16} weight="bold" />
-                              </button>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {isOwner && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setIsBoardModalOpen(false);
+                                      if (onEditBoard) {
+                                        onEditBoard(b);
+                                      }
+                                    }}
+                                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#F0F2F5] hover:bg-[#ECEFF3] text-[#353849] hover:text-[#1A1B25] flex items-center justify-center transition cursor-pointer shrink-0"
+                                    title="Edit board"
+                                    aria-label="Edit board"
+                                  >
+                                    <Pencil className="w-4 h-4 stroke-[2.2]" />
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (onDeleteBoard) {
+                                      onDeleteBoard(b.id);
+                                    }
+                                  }}
+                                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#F0F2F5] hover:bg-[#FEE2E2] hover:text-rose-600 text-[#808897] flex items-center justify-center transition cursor-pointer shrink-0"
+                                  title="Delete board"
+                                >
+                                  <Trash size={16} weight="bold" />
+                                </button>
+                              </div>
                             </div>
 
                             {/* Badges row */}
@@ -473,14 +507,37 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Profile Menu Dropdown */}
             {isProfileMenuOpen && (
               <div className="absolute right-0 mt-2 w-64 bg-white border border-[#ECEFF3] rounded-2xl shadow-xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                {/* Active user header */}
-                <div className="px-3.5 py-2.5 border-b border-[#ECEFF3] flex items-center gap-3">
+                {/* Active user header - clicking navigates to the owner or member view of the board */}
+                <div 
+                  onClick={() => {
+                    setIsProfileMenuOpen(false);
+                    const isOwner = (boardPersona?.role || currentPersona.role) === 'owner' || currentPersona.id === boardOwnerPersona.id;
+                    if (isOwner) {
+                      if (onNavigateToOwnerView) {
+                        onNavigateToOwnerView();
+                      } else if (onSelectPersona) {
+                        onSelectPersona(boardOwnerPersona);
+                      }
+                    } else {
+                      if (onNavigateToMemberView) {
+                        onNavigateToMemberView(boardPersona || currentPersona);
+                      } else if (onSelectPersona) {
+                        onSelectPersona(boardPersona || currentPersona);
+                      }
+                    }
+                  }}
+                  className="px-3.5 py-2.5 border-b border-[#ECEFF3] flex items-center gap-3 cursor-pointer hover:bg-[#F6F8FA] transition group select-none rounded-t-2xl font-['Nunito']"
+                  role="button"
+                  tabIndex={0}
+                  title="Click to view board"
+                  aria-label="View Board"
+                >
                   <img 
                     src={boardPersona?.avatar || currentPersona.avatar} 
                     alt={boardPersona?.name || currentPersona.name} 
-                    className="w-10 h-10 rounded-full object-cover ring-2 ring-amber-400 shrink-0"
+                    className="w-10 h-10 rounded-full object-cover ring-2 ring-amber-400 shrink-0 group-hover:ring-amber-500 transition"
                   />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="font-extrabold text-sm text-[#1A1B25] truncate flex items-center gap-1.5">
                       <span>{boardPersona?.name || currentPersona.name}</span>
                       {boardPersona?.name && boardPersona.name !== currentPersona.name && (
@@ -493,61 +550,104 @@ export const Header: React.FC<HeaderProps> = ({
                       <span className="capitalize font-semibold">{boardPersona?.role || currentPersona.role}</span>
                       <span>· {boardOwnerPersona.id === currentPersona.id ? 'Board Owner' : 'Joined Member'}</span>
                     </div>
+                    <div className="text-[10px] text-amber-700 font-bold flex items-center gap-0.5 mt-0.5">
+                      <span>{boardOwnerPersona.id === currentPersona.id || (boardPersona?.role || currentPersona.role) === 'owner' ? 'Owner View · Board' : 'Member View · Board'}</span>
+                      <CaretRight size={10} weight="bold" className="group-hover:translate-x-0.5 transition-transform" />
+                    </div>
                   </div>
                 </div>
 
                 {/* Real Board Participants (Owner & Actual Joined Invitees Only) */}
                 <div className="px-3.5 pt-2 pb-1 flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-[#808897] uppercase tracking-wider">
+                  <span className="text-[10px] font-bold text-[#808897] uppercase tracking-wider font-['Nunito']">
                     Board Participants ({realBoardParticipants.length})
                   </span>
+                  <span className="text-[10px] font-semibold text-[#808897] font-['Nunito']">
+                    Click to switch view
+                  </span>
                 </div>
-                <div className="py-1 max-h-56 overflow-y-auto">
+                <div className="py-1 px-1.5 max-h-56 overflow-y-auto space-y-1">
                   {realBoardParticipants.map((p) => {
                     const isOwner = p.id === boardOwnerPersona.id || p.role === 'owner';
-                    const isCurrent = currentPersona.id === p.id;
+                    const isCurrent = currentPersona.id === p.id && (isOwner ? currentPersona.role === 'owner' : currentPersona.role !== 'owner');
 
                     return (
-                      <button
+                      <div
                         key={p.id}
-                        type="button"
+                        role="button"
+                        tabIndex={0}
                         onClick={() => {
-                          onSelectPersona(p);
                           setIsProfileMenuOpen(false);
+                          if (isOwner) {
+                            if (onNavigateToOwnerView) {
+                              onNavigateToOwnerView();
+                            } else if (onSelectPersona) {
+                              onSelectPersona({ ...p, role: 'owner' });
+                            }
+                          } else {
+                            if (onNavigateToMemberView) {
+                              onNavigateToMemberView({ ...p, role: 'member' });
+                            } else if (onSelectPersona) {
+                              onSelectPersona({ ...p, role: 'member' });
+                            }
+                          }
                         }}
-                        className={`w-full flex items-center justify-between px-3.5 py-2 text-left text-xs hover:bg-[#F6F8FA] transition cursor-pointer ${
-                          isCurrent ? 'bg-amber-50 font-bold text-[#1A1B25]' : 'text-[#353849]'
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-2xl text-left transition cursor-pointer select-none font-['Nunito'] group ${
+                          isCurrent
+                            ? 'bg-[#ECEFF3] text-[#1A1B25] font-extrabold'
+                            : 'bg-[#F8F9FB] hover:bg-[#F6F8FA] text-[#353849]'
                         }`}
+                        title={isOwner ? 'Open Owner View of this board' : `Open Member View for ${p.name}`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <img 
-                            src={p.avatar} 
-                            alt={p.name} 
-                            className={`w-6 h-6 rounded-full object-cover shrink-0 ${
-                              isOwner ? 'ring-1.5 ring-amber-500' : ''
-                            }`} 
-                          />
+                          <div className="relative shrink-0">
+                            <img 
+                              src={p.avatar} 
+                              alt={p.name} 
+                              className={`w-8 h-8 rounded-full object-cover shrink-0 ${
+                                isOwner ? 'ring-2 ring-amber-400' : 'ring-1 ring-[#DFE1E6]'
+                              }`} 
+                            />
+                            {isOwner && (
+                              <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#1A1B25] text-amber-300 flex items-center justify-center">
+                                <Crown size={10} weight="fill" />
+                              </div>
+                            )}
+                          </div>
                           <div className="min-w-0 truncate">
-                            <div className="font-semibold text-xs leading-tight truncate flex items-center gap-1.5">
+                            <div className="font-extrabold text-xs leading-tight truncate flex items-center gap-1.5 text-[#1A1B25]">
                               <span>{p.name}</span>
-                              {isOwner && (
-                                <Crown size={12} weight="fill" className="text-amber-500 shrink-0" />
-                              )}
                             </div>
-                            <div className="text-[10px] text-[#808897] capitalize">
-                              {isOwner ? 'Board Owner' : 'Joined via Invite'}
+                            <div className="text-[10px] text-[#666D80] flex items-center gap-1 mt-0.5">
+                              <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
+                                isOwner 
+                                  ? 'bg-[#272835] text-white' 
+                                  : 'bg-[#DFE1E6] text-[#353849]'
+                              }`}>
+                                {isOwner ? 'Owner View' : 'Member View'}
+                              </span>
                             </div>
                           </div>
                         </div>
-                        {isCurrent && (
-                          <Check size={16} weight="bold" className="text-amber-600 shrink-0 ml-2" />
-                        )}
-                      </button>
+                        <div className="flex items-center gap-1.5 ml-2 shrink-0">
+                          {isCurrent ? (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#1A1B25] text-white">
+                              <Check size={11} weight="bold" />
+                              <span>Active</span>
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#ECEFF3] text-[#1A1B25] group-hover:bg-[#1A1B25] group-hover:text-white transition">
+                              <span>{isOwner ? 'Owner' : 'Member'}</span>
+                              <CaretRight size={10} weight="bold" />
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     );
                   })}
 
                   {joinedInviteParticipants.length === 0 && (
-                    <div className="px-3.5 py-2 text-[11px] text-[#808897] bg-[#F8F9FB] mx-2 my-1 rounded-xl">
+                    <div className="px-3.5 py-2 text-[11px] text-[#808897] bg-[#F8F9FB] mx-1 my-1 rounded-xl font-['Nunito']">
                       No guests have joined yet. Share the invite link below to invite friends!
                     </div>
                   )}
@@ -555,6 +655,19 @@ export const Header: React.FC<HeaderProps> = ({
 
                 {/* Extra Utility Actions moved here */}
                 <div className="border-t border-[#ECEFF3] pt-1.5 mt-1 px-1.5 space-y-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetUser = boardPersona || currentPersona;
+                      onOpenUserProfile?.(targetUser);
+                      setIsProfileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs text-[#353849] hover:bg-[#F6F8FA] font-bold transition cursor-pointer"
+                  >
+                    <User size={16} weight="bold" className="text-[#666D80]" />
+                    <span>View Registered Profile</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {

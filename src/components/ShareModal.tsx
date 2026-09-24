@@ -2,14 +2,10 @@ import React, { useState } from 'react';
 import { 
   X, 
   Copy, 
-  CheckCircle2, 
-  MessageCircle, 
-  Share2, 
-  Smartphone, 
-  QrCode, 
-  Sparkles,
-  ExternalLink
+  Check, 
+  Smartphone,
 } from 'lucide-react';
+import { ShareFat } from '@phosphor-icons/react';
 import { PlanBoard } from '../types';
 
 interface ShareModalProps {
@@ -29,7 +25,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const shareUrl = typeof window !== 'undefined'
     ? `${window.location.origin}${window.location.pathname}?join=${board.id}`
     : `https://planboard.app/join/${board.id}`;
-  const whatsappMessage = `Guys, join the plan for ${board.title} on Plan Board:\n\n${shareUrl}`;
 
   if (!isOpen) return null;
 
@@ -39,112 +34,113 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleOpenWhatsApp = () => {
-    const encoded = encodeURIComponent(whatsappMessage);
-    window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
-  };
+  const memberCount = (board.members || []).length;
+  const memberText = `${memberCount} ${memberCount === 1 ? 'person' : 'people'} planning together`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-[#ECEFF3] animate-in zoom-in-95 duration-150">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white w-full max-w-[560px] rounded-[32px] shadow-2xl border border-[#ECEFF3] overflow-hidden animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#ECEFF3] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-              <Share2 className="w-4 h-4" />
-            </div>
+        <div className="px-6 sm:px-7 py-5 border-b border-[#ECEFF3] flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <ShareFat weight="fill" className="w-6 h-6 text-[#1A1B25] shrink-0" />
             <div>
-              <h3 className="text-base font-extrabold text-[#1A1B25]">
+              <h2 className="text-xl sm:text-[22px] font-extrabold text-[#1A1B25] tracking-tight leading-tight">
                 Invite to Plan Board
-              </h3>
-              <p className="text-xs text-[#666D80]">
+              </h2>
+              <p className="text-xs sm:text-sm text-[#808897] font-normal mt-0.5">
                 Friends join instantly without mandatory account creation
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-[#F6F8FA] text-[#808897] hover:text-[#1A1B25] transition cursor-pointer"
+            aria-label="Close"
+            className="w-10 h-10 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] text-[#808897] hover:text-[#1A1B25] flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5 stroke-[2.2]" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-5">
-          {/* WhatsApp Primary Action */}
+        {/* Content Body */}
+        <div className="p-6 sm:p-7 space-y-6">
+          {/* Shareable Link Section */}
           <div>
-            <button
-              onClick={handleOpenWhatsApp}
-              className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-md transition cursor-pointer active:scale-98"
-            >
-              <MessageCircle className="w-5 h-5 fill-white/20" />
-              <span>Share Directly to WhatsApp</span>
-            </button>
-          </div>
-
-          {/* Copy Link Input Bar */}
-          <div>
-            <label className="block text-xs font-black uppercase tracking-wider text-[#666D80] mb-1.5">
-              Shareable Guest Link
+            <label className="block text-sm sm:text-[15px] font-semibold text-[#1A1B25] mb-2.5">
+              Shareable link
             </label>
-            <div className="flex items-center gap-2">
+            <div className="w-full h-14 px-4 sm:px-5 rounded-2xl bg-[#F8F9FB] border border-[#ECEFF3] flex items-center">
               <input
                 type="text"
                 readOnly
                 value={shareUrl}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F8F9FB] border border-[#DFE1E6] text-xs font-mono text-[#353849] select-all focus:outline-none"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+                className="w-full bg-transparent text-sm sm:text-[15px] text-[#666D80] font-normal truncate outline-none select-all cursor-text"
               />
-              <button
-                onClick={handleCopy}
-                className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs ${
-                  copied
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                    : 'bg-[#1A1B25] text-white hover:bg-[#272835]'
-                }`}
-              >
-                {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                <span>{copied ? 'Copied!' : 'Copy Link'}</span>
-              </button>
             </div>
           </div>
 
-          {/* WhatsApp Chat Simulation Preview */}
-          <div className="bg-[#EFEAE2] rounded-2xl p-4 border border-[#DFE1E6]/80 text-[#1A1B25]">
-            <div className="text-[10px] font-bold text-[#666D80] uppercase tracking-wider mb-2 flex items-center gap-1">
-              <span>WhatsApp Message Preview</span>
+          {/* WhatsApp Message Preview Card */}
+          <div className="bg-[#FFF9F2] rounded-2xl p-5 sm:p-6">
+            <div className="text-sm sm:text-[15px] font-semibold text-[#1A1B25] mb-3.5">
+              WhatsApp Message Preview
             </div>
-            <div className="bg-white rounded-xl p-3 shadow-xs max-w-xs text-xs space-y-1.5">
-              <p className="font-normal text-[#1A1B25]">
-                Guys, join the plan for <strong className="font-black">{board.title}</strong> 😂
-              </p>
-              <div className="p-2 rounded-lg bg-[#F8F9FB] border border-[#ECEFF3]">
-                <div className="font-extrabold text-[11px] text-[#1A1B25] flex items-center gap-1">
-                  <span>{board.emoji}</span>
-                  <span>{board.title}</span>
-                </div>
-                <div className="text-[10px] text-[#666D80]">
-                  {board.date ? `${board.date} · ` : ''}{(board.members || []).length} {(board.members || []).length === 1 ? 'person' : 'people'} planning together
-                </div>
+            <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-2xs">
+              <div className="font-bold text-[#1A1B25] text-sm sm:text-[15px] leading-snug">
+                Guys, join the plan for {board.title} 🎉😂
               </div>
-              <div className="text-[9px] text-[#808897] text-right">10:24 AM ✓✓</div>
+              <div className="text-xs sm:text-sm text-[#353849] font-normal mt-1.5">
+                {memberText}
+              </div>
             </div>
           </div>
 
-          {/* Simulator Button */}
-          <div className="pt-2 border-t border-[#ECEFF3]">
-            <div className="text-xs text-[#666D80] mb-2 font-medium">
+          {/* Primary Action: Copy Link Button */}
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="w-full py-4 px-6 rounded-full bg-[#1A1B25] hover:bg-[#272835] active:scale-[0.99] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 transition cursor-pointer shadow-sm"
+          >
+            {copied ? (
+              <>
+                <Check className="w-5 h-5 stroke-[2.5] text-emerald-400" />
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-5 h-5 stroke-[2]" />
+                <span>Copy Link</span>
+              </>
+            )}
+          </button>
+
+          {/* Divider */}
+          <div className="border-t border-[#ECEFF3] pt-1" />
+
+          {/* Simulation Section */}
+          <div>
+            <div className="text-xs sm:text-sm font-medium text-[#1A1B25] mb-3">
               Want to experience what a recipient experiences when opening this link?
             </div>
             <button
+              type="button"
               onClick={() => {
                 onClose();
                 onLaunchJoinSimulation();
               }}
-              className="w-full py-2.5 px-4 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-black transition cursor-pointer flex items-center justify-center gap-2"
+              className="w-full py-4 px-5 rounded-2xl sm:rounded-[20px] bg-[#FFF9F0] hover:bg-[#FFF4E0] active:scale-[0.99] border border-[#FCD34D] transition cursor-pointer flex items-center justify-center gap-2.5 shadow-2xs"
             >
-              <Smartphone className="w-4 h-4 text-amber-700" />
-              <span>Simulate Recipient Join Experience (30-sec flow)</span>
+              <Smartphone className="w-5 h-5 text-[#EFA00E] stroke-[2.2]" />
+              <span className="font-bold text-xs sm:text-sm text-[#EFA00E]">
+                Stimulate Recipient Join Experience (30-sec flow)
+              </span>
             </button>
           </div>
         </div>
@@ -152,3 +148,4 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     </div>
   );
 };
+

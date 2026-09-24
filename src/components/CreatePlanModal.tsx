@@ -19,6 +19,8 @@ interface CreatePlanModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreatePlan: (newBoard: Partial<PlanBoard>) => void;
+  onSaveBoard?: (updatedBoard: PlanBoard) => void;
+  initialBoard?: PlanBoard | null;
   currentPersona: UserPersona;
 }
 
@@ -34,6 +36,8 @@ export const CreatePlanModal: React.FC<CreatePlanModalProps> = ({
   isOpen,
   onClose,
   onCreatePlan,
+  onSaveBoard,
+  initialBoard,
   currentPersona,
 }) => {
   // Board Details
@@ -71,28 +75,59 @@ export const CreatePlanModal: React.FC<CreatePlanModalProps> = ({
     BOARD_AVATARS[0]?.url || currentPersona.avatar
   );
 
-  // Reset form when opened
+  // Reset form when opened or populate with initialBoard
   useEffect(() => {
     if (isOpen) {
-      setTitle('');
-      setEmoji('💵');
-      setDescription('');
-      setIsEmojiPickerOpen(false);
-      setOpenSections({
-        plans: false,
-        cover: false,
-        profile: false,
-      });
-      setCoverImage(SAMPLE_COVERS[0]);
-      setCoverImagePosition({ ...DEFAULT_IMAGE_POSITION });
-      setUseCustomName(false);
-      setCustomDisplayName('');
-      setSelectedAvatar(BOARD_AVATARS[0]?.url || currentPersona.avatar);
-      setAttachedPlans([]);
-      setIsAddPlanOpen(false);
-      setEditingDeciderPlan(null);
+      if (initialBoard) {
+        setTitle(initialBoard.title || '');
+        setEmoji(initialBoard.emoji || '💵');
+        setDescription(initialBoard.description || '');
+        setIsEmojiPickerOpen(false);
+        setOpenSections({
+          plans: false,
+          cover: false,
+          profile: false,
+        });
+        setCoverImage(initialBoard.coverImage || SAMPLE_COVERS[0]);
+        setCoverImagePosition(initialBoard.coverImagePosition || { ...DEFAULT_IMAGE_POSITION });
+        const hasCustomName = Boolean(
+          initialBoard.creatorCustomIdentity?.useCustomName || initialBoard.useCustomName
+        );
+        setUseCustomName(hasCustomName);
+        setCustomDisplayName(
+          initialBoard.creatorCustomIdentity?.displayName ||
+            initialBoard.creatorCustomName ||
+            ''
+        );
+        setSelectedAvatar(
+          initialBoard.creatorCustomIdentity?.avatar ||
+            initialBoard.creatorCustomAvatar ||
+            currentPersona.avatar
+        );
+        setAttachedPlans(initialBoard.plans || []);
+        setIsAddPlanOpen(false);
+        setEditingDeciderPlan(null);
+      } else {
+        setTitle('');
+        setEmoji('💵');
+        setDescription('');
+        setIsEmojiPickerOpen(false);
+        setOpenSections({
+          plans: false,
+          cover: false,
+          profile: false,
+        });
+        setCoverImage(SAMPLE_COVERS[0]);
+        setCoverImagePosition({ ...DEFAULT_IMAGE_POSITION });
+        setUseCustomName(false);
+        setCustomDisplayName('');
+        setSelectedAvatar(BOARD_AVATARS[0]?.url || currentPersona.avatar);
+        setAttachedPlans([]);
+        setIsAddPlanOpen(false);
+        setEditingDeciderPlan(null);
+      }
     }
-  }, [isOpen, currentPersona]);
+  }, [isOpen, initialBoard, currentPersona]);
 
   // Close emoji picker on click outside
   useEffect(() => {
@@ -167,7 +202,46 @@ export const CreatePlanModal: React.FC<CreatePlanModalProps> = ({
     const planWithDate = attachedPlans.find((p) => p.date || p.time || p.dateTime);
     const finalCreatorName = useCustomName && customDisplayName.trim()
       ? customDisplayName.trim()
-      : currentPersona.name;
+      : (initialBoard?.ownerName || currentPersona.name);
+
+    if (initialBoard && onSaveBoard) {
+      const updatedBoard: PlanBoard = {
+        ...initialBoard,
+        title: title.trim(),
+        emoji,
+        description: description.trim() || initialBoard.description,
+        coverImage,
+        coverImagePosition,
+        plans: attachedPlans,
+        date: planWithDate?.date ?? initialBoard.date,
+        time: planWithDate?.time ?? initialBoard.time,
+        dateTime: planWithDate?.dateTime ?? initialBoard.dateTime,
+        hasSpecificTime: planWithDate?.hasSpecificTime ?? initialBoard.hasSpecificTime,
+        creatorCustomName: finalCreatorName,
+        creatorCustomAvatar: selectedAvatar,
+        useCustomName: Boolean(useCustomName && customDisplayName.trim()),
+        creatorCustomIdentity: {
+          useCustomName: Boolean(useCustomName && customDisplayName.trim()),
+          displayName: finalCreatorName,
+          avatar: selectedAvatar,
+        },
+        members: (initialBoard.members || []).map((m) => {
+          if (m.id === initialBoard.ownerId || m.role === 'owner') {
+            return {
+              ...m,
+              name: finalCreatorName,
+              avatar: selectedAvatar,
+            };
+          }
+          return m;
+        }),
+        ownerName: finalCreatorName,
+      };
+
+      onSaveBoard(updatedBoard);
+      onClose();
+      return;
+    }
 
     onCreatePlan({
       title: title.trim(),
@@ -203,7 +277,7 @@ export const CreatePlanModal: React.FC<CreatePlanModalProps> = ({
         {/* Header: Title and Close Button */}
         <div className="flex items-center justify-between mb-8 sm:mb-9">
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#1A1B25] tracking-tight">
-            New Plan Board
+            {initialBoard ? 'Edit Plan Board' : 'New Plan Board'}
           </h1>
           <button
             type="button"
@@ -454,7 +528,7 @@ export const CreatePlanModal: React.FC<CreatePlanModalProps> = ({
               : 'bg-[#DFE1E6] text-white cursor-not-allowed select-none'
           }`}
         >
-          Publish Board
+          {initialBoard ? 'Save Changes' : 'Publish Board'}
         </button>
 
       </div>

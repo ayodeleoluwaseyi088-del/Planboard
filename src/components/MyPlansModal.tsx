@@ -12,7 +12,8 @@ import {
   Crown,
   Layers,
   FolderKanban,
-  UserCheck
+  UserCheck,
+  Pencil
 } from 'lucide-react';
 import { PlanBoard, UserPersona } from '../types';
 import { getAllStoredBoards, isDummyBoard } from '../utils/boardStorage';
@@ -25,6 +26,7 @@ interface MyPlansModalProps {
   onSelectBoard: (boardId: string) => void;
   onOpenCreatePlan: () => void;
   onDeleteBoard?: (boardId: string) => void;
+  onEditBoard?: (board: PlanBoard) => void;
   currentPersona: UserPersona;
 }
 
@@ -36,6 +38,7 @@ export const MyPlansModal: React.FC<MyPlansModalProps> = ({
   onSelectBoard,
   onOpenCreatePlan,
   onDeleteBoard,
+  onEditBoard,
   currentPersona,
 }) => {
   const [filter, setFilter] = useState<'all' | 'created' | 'joined'>('all');
@@ -377,6 +380,21 @@ export const MyPlansModal: React.FC<MyPlansModalProps> = ({
 
                   {/* Right Actions */}
                   <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                    {onEditBoard && isOwner && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onClose();
+                          onEditBoard(b);
+                        }}
+                        className="p-2 rounded-xl text-[#808897] hover:text-[#1A1B25] hover:bg-[#ECEFF3] transition cursor-pointer"
+                        title="Edit board"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
+
                     {onDeleteBoard && isOwner && allBoards.length > 1 && (
                       <button
                         type="button"

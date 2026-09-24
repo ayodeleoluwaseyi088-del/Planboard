@@ -57,7 +57,7 @@ export const YourPartSection: React.FC<YourPartSectionProps> = ({
             <div className="text-xs font-bold uppercase tracking-wider text-amber-900">
               Personalized Focus
             </div>
-            <h2 className="text-xl sm:text-2xl font-black text-[#1A1B25]">
+            <h2 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight leading-tight">
               YOUR PART
             </h2>
           </div>

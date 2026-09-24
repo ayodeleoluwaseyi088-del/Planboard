@@ -4,7 +4,6 @@ import {
   Clock, 
   CheckCircle2, 
   Users, 
-  Plus, 
   Sparkles, 
   CheckSquare,
   Check,
@@ -47,7 +46,7 @@ interface DecisionsSectionProps {
   onUpdateParticipantStatus?: (planId: string, memberId: string, optionId: string) => void;
   onVolunteerForTask?: (taskId: string, customAssigneeId?: string, customAssigneeName?: string) => void;
   onToggleTaskComplete?: (taskId: string) => void;
-  onOpenCreateItem: () => void;
+  onOpenCreateItem?: () => void;
   onRemovePlan?: (planId: string) => void;
 }
 
@@ -1209,39 +1208,26 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
   return (
     <section id="decisions-section" className="mb-12 scroll-mt-20">
       {/* Section Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col items-center justify-center text-center mb-6">
         <div>
-          <h2 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight leading-tight">
+          <h2 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight leading-tight text-center">
             Voting &amp; Decision
           </h2>
-          <p className="text-sm sm:text-[15px] text-[#666D80] mt-1 font-normal leading-normal">
+          <p className="text-sm sm:text-[15px] text-[#666D80] mt-1 font-normal leading-normal text-center">
             Slide and swipe across decisions to vote, spin wheels, and draw mystery cards
           </p>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={onOpenCreateItem}
-            title="Create New Decision or Action"
-            aria-label="Create New Decision or Action"
-            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white flex items-center justify-center transition cursor-pointer shadow-xs active:scale-95 shrink-0"
-          >
-            <Plus className="w-5 h-5 text-white stroke-[2.5]" />
-          </button>
         </div>
       </div>
 
       {totalCount === 0 ? (
-        <div className="bg-[#F8F9FB] rounded-3xl p-10 text-center">
-          <p className="text-[#666D80] font-bold text-sm">No decisions currently open on this board.</p>
-          <button
-            type="button"
-            onClick={onOpenCreateItem}
-            className="mt-4 px-5 py-2.5 rounded-2xl bg-[#1A1B25] text-white text-xs font-black hover:bg-[#272835] transition cursor-pointer"
-          >
-            Create First Decision
-          </button>
+        <div className="w-full py-16 sm:py-24 flex flex-col items-center justify-center text-center select-none">
+          <Vote className="w-9 h-9 text-[#272835] stroke-[2.2] mb-4" />
+          <h3 className="text-xl sm:text-2xl font-bold text-[#272835] tracking-tight leading-snug mb-2">
+            No decisions open yet
+          </h3>
+          <p className="text-sm sm:text-base text-[#808897] font-normal tracking-normal max-w-lg leading-relaxed">
+            Decisions, polls, and deciders will appear here once configured on the board
+          </p>
         </div>
       ) : (
         /* STACKED DECK PRESENTATION: Strictly designed as physical stacked cards matching user reference image */

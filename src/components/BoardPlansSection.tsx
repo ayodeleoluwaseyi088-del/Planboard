@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { 
   Plus, 
   Check,
-  Copy
+  Copy,
+  Layers
 } from 'lucide-react';
 import { AttachedPlan, PlanBoard, UserPersona } from '../types';
 import { getPlanTruthFromBoard } from '../utils/planSync';
@@ -76,7 +77,7 @@ export const BoardPlansSection: React.FC<BoardPlansSectionProps> = ({
       {/* Section Header */}
       <div className="flex items-center justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl sm:text-[26px] font-bold text-[#1A1B25] tracking-tight leading-tight">
+          <h2 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight leading-tight">
             The Plan
           </h2>
           <p className="text-sm sm:text-[15px] text-[#808897] mt-1 font-normal leading-normal">
@@ -111,33 +112,29 @@ export const BoardPlansSection: React.FC<BoardPlansSectionProps> = ({
         </div>
       </div>
 
-      {/* Plans Display: Strictly Empty State when no plans exist, otherwise show all plans unified */}
+      {/* Plans Display: Strictly Empty State matching Visual Suggestions design */}
       {plans.length === 0 ? (
-        <div className="p-8 sm:p-10 text-center rounded-3xl bg-white border border-[#ECEFF3] shadow-xs">
-          <div className="w-12 h-12 mx-auto rounded-2xl bg-[#F8F9FB] border border-[#ECEFF3] flex items-center justify-center text-2xl mb-3">
-            📋
-          </div>
-          <p className="text-sm font-black text-[#1A1B25]">
+        <div className="w-full py-16 sm:py-24 flex flex-col items-center justify-center text-center select-none">
+          <Layers className="w-9 h-9 text-[#272835] stroke-[2.2] mb-4" />
+          <h3 className="text-xl sm:text-2xl font-bold text-[#272835] tracking-tight leading-snug mb-2">
             No plans added yet
+          </h3>
+          <p className="text-sm sm:text-base text-[#808897] font-normal tracking-normal max-w-lg leading-relaxed">
+            {isOwner ? (
+              <>Plans represent what has been decided on this board. Add a plan subject (Restaurant, Location, Transportation, etc.) to get started.</>
+            ) : (
+              <>The board creator hasn&apos;t added any plans to this board yet.</>
+            )}
           </p>
-          {isOwner ? (
-            <>
-              <p className="text-xs text-[#666D80] mt-1.5 max-w-sm mx-auto">
-                Plans represent what has been decided on this board. Click &quot;Add Plan&quot; to define a plan subject (Restaurant, Location, Transportation, etc.).
-              </p>
-              <button
-                type="button"
-                onClick={() => setIsAddModalOpen(true)}
-                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-[#1A1B25] hover:bg-[#272835] text-white text-xs font-black transition cursor-pointer shadow-xs active:scale-98"
-              >
-                <Plus className="w-4 h-4 stroke-[2.5]" />
-                <span>Add Plan</span>
-              </button>
-            </>
-          ) : (
-            <p className="text-xs text-[#666D80] mt-1.5">
-              The board creator hasn&apos;t added any plans to this board yet.
-            </p>
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => setIsAddModalOpen(true)}
+              className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white text-sm font-bold transition cursor-pointer shadow-xs active:scale-95"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Add Plan</span>
+            </button>
           )}
         </div>
       ) : (

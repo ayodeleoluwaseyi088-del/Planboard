@@ -65,6 +65,7 @@ import { CreatePlanModal } from './components/CreatePlanModal';
 import { CreateItemModal } from './components/CreateItemModal';
 import { MyPlansModal } from './components/MyPlansModal';
 import { AddSuggestionModal } from './components/AddSuggestionModal';
+import { UserProfileModal } from './components/UserProfileModal';
 import { BOARD_AVATARS } from './utils/boardAvatars';
 
 export default function App() {
@@ -114,6 +115,8 @@ export default function App() {
   const [isAddSuggestionOpen, setIsAddSuggestionOpen] = useState(false);
   const [preselectedPlanIdForSuggestion, setPreselectedPlanIdForSuggestion] = useState<string | undefined>(undefined);
   const [isMyPlansOpen, setIsMyPlansOpen] = useState(false);
+  const [editingBoard, setEditingBoard] = useState<PlanBoard | null>(null);
+  const [viewingProfileUser, setViewingProfileUser] = useState<UserPersona | null>(null);
 
   // Authenticated user persona selection handler
   const handleSelectPersona = (persona: UserPersona) => {
@@ -130,6 +133,68 @@ export default function App() {
       setBoard(nextBoard);
       saveActiveBoardId(nextBoard.id);
     }
+  };
+
+  // Handler to navigate directly to Owner View of the board
+  const handleNavigateToOwnerView = () => {
+    // 1. If the current user is not the owner, switch persona to the board owner
+    const ownerMember = (board.members || []).find(
+      (m) => m.role === 'owner' || m.id === board.ownerId
+    );
+    const ownerPersona = USER_PERSONAS.find((p) => p.id === board.ownerId) || {
+      id: board.ownerId || 'owner',
+      name: ownerMember?.name || board.creatorCustomIdentity?.displayName || board.creatorCustomName || board.ownerName || 'Board Owner',
+      avatar: ownerMember?.avatar || board.creatorCustomIdentity?.avatar || board.creatorCustomAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      role: 'owner' as const,
+    };
+    
+    if (currentPersona.id !== ownerPersona.id) {
+      setCurrentPersona(ownerPersona);
+      saveStoredAuthUser(ownerPersona);
+    }
+    
+    // 2. Ensure we are in the main board view
+    setActiveSection('overview');
+    setViewingProfileUser(null);
+    setIsMyPlansOpen(false);
+    setIsShareOpen(false);
+    setIsJoinFlowOpen(false);
+    setIsCreatePlanOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Handler to navigate directly to Member View of the board
+  const handleNavigateToMemberView = (memberPersona: UserPersona) => {
+    // 1. Switch persona to the selected member with role 'member'
+    const memberToSet: UserPersona = {
+      ...memberPersona,
+      role: 'member',
+    };
+    
+    if (currentPersona.id !== memberToSet.id || currentPersona.role !== 'member') {
+      setCurrentPersona(memberToSet);
+      saveStoredAuthUser(memberToSet);
+    }
+    
+    // 2. Ensure we are in the main board view
+    setActiveSection('overview');
+    setViewingProfileUser(null);
+    setIsMyPlansOpen(false);
+    setIsShareOpen(false);
+    setIsJoinFlowOpen(false);
+    setIsCreatePlanOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Update existing Plan Board handler
+  const handleSaveBoard = (updatedBoard: PlanBoard) => {
+    saveBoard(updatedBoard);
+    setAllBoards((prev) => prev.map((b) => (b.id === updatedBoard.id ? updatedBoard : b)));
+    if (board.id === updatedBoard.id) {
+      setBoard(updatedBoard);
+    }
+    setIsCreatePlanOpen(false);
+    setEditingBoard(null);
   };
 
   // Persist board updates to storage & update allBoards list
@@ -2199,8 +2264,13 @@ export default function App() {
     return (
       <CreatePlanModal
         isOpen={isCreatePlanOpen}
-        onClose={() => setIsCreatePlanOpen(false)}
+        onClose={() => {
+          setIsCreatePlanOpen(false);
+          setEditingBoard(null);
+        }}
         onCreatePlan={handleCreatePlan}
+        onSaveBoard={handleSaveBoard}
+        initialBoard={editingBoard}
         currentPersona={currentPersona}
       />
     );
@@ -2225,10 +2295,20 @@ export default function App() {
         }}
         onSelectPersona={handleSelectPersona}
         onOpenMyPlans={() => setIsMyPlansOpen(true)}
-        onOpenCreatePlan={() => setIsCreatePlanOpen(true)}
+        onOpenCreatePlan={() => {
+          setEditingBoard(null);
+          setIsCreatePlanOpen(true);
+        }}
+        onEditBoard={(boardToEdit) => {
+          setEditingBoard(boardToEdit);
+          setIsCreatePlanOpen(true);
+        }}
         onOpenShare={() => setIsShareOpen(true)}
         onOpenJoinFlow={() => setIsJoinFlowOpen(true)}
         onDeleteBoard={handleDeleteBoard}
+        onOpenUserProfile={(targetPersona) => setViewingProfileUser(targetPersona)}
+        onNavigateToOwnerView={handleNavigateToOwnerView}
+        onNavigateToMemberView={handleNavigateToMemberView}
       />
 
       {/* Main Board Container with dedicated section views */}
@@ -2507,11 +2587,43 @@ export default function App() {
         }}
         onOpenCreatePlan={() => {
           setIsMyPlansOpen(false);
+          setEditingBoard(null);
+          setIsCreatePlanOpen(true);
+        }}
+        onEditBoard={(boardToEdit) => {
+          setIsMyPlansOpen(false);
+          setEditingBoard(boardToEdit);
           setIsCreatePlanOpen(true);
         }}
         onDeleteBoard={handleDeleteBoard}
         currentPersona={currentPersona}
       />
+
+      {viewingProfileUser && (
+        <UserProfileModal
+          isOpen={!!viewingProfileUser}
+          onClose={() => setViewingProfileUser(null)}
+          user={viewingProfileUser}
+          allBoards={allBoards}
+          currentBoard={board}
+          isCurrentUser={viewingProfileUser.id === currentPersona.id}
+          onUpdateUser={(updated) => {
+            if (updated.id === currentPersona.id) {
+              setCurrentPersona(updated);
+              saveStoredAuthUser(updated);
+            }
+            setViewingProfileUser(updated);
+          }}
+          onSelectBoard={(boardId) => {
+            const stored = getAllStoredBoards();
+            const found = stored.find((b) => b.id === boardId) || allBoards.find((b) => b.id === boardId);
+            if (found) {
+              setBoard(found);
+              saveActiveBoardId(boardId);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

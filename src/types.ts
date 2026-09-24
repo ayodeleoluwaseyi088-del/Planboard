@@ -325,6 +325,11 @@ export interface UserPersona {
   avatar: string;
   role: MemberRole;
   email?: string;
+  username?: string;
+  displayName?: string;
+  bio?: string;
+  location?: string;
+  memberSince?: string;
   isGuest?: boolean;
 }
 
