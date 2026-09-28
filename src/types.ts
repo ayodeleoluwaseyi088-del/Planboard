@@ -32,6 +32,10 @@ export interface DecisionItem {
   options: DecisionOption[];
   totalVotesNeeded: number;
   deadlineText: string;
+  deadlineIso?: string;
+  dateTime?: string;
+  date?: string;
+  time?: string;
   priority: ItemPriority;
   status: ItemStatus;
   finalDecision?: string; // Set when owner finalizes
@@ -42,6 +46,7 @@ export interface DecisionItem {
   isReopened?: boolean;
   decisionRound?: number;
   reopenedAt?: string;
+  isExpired?: boolean;
 }
 
 export interface ImagePosition {
@@ -203,7 +208,7 @@ export interface AttachedPlan {
   title: string;
   emoji: string;
   category: string; // e.g. "Location", "Drinks", "Music", "Food", "Theme", "Gift", "Transportation", etc.
-  deciderType: DeciderType;
+  deciderType?: DeciderType;
   description?: string;
   
   // Link to section item ID
@@ -267,6 +272,8 @@ export interface AttachedPlan {
   dateTime?: string; // ISO 8601 machine-readable timestamp (e.g. "2026-08-20T19:00:00")
   endDateTime?: string; // optional ISO 8601 end timestamp for time ranges
   hasSpecificTime?: boolean; // true if an exact time was chosen, false for date-only
+  deadlineIso?: string;
+  isExpired?: boolean;
   location?: string;
   estimatedCost?: string;
   status: PlanStatus;

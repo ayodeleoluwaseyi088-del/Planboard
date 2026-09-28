@@ -31,7 +31,7 @@ export const ContributionsSection: React.FC<ContributionsSectionProps> = ({
   onTogglePaymentPaid,
   onOpenCreateItem,
 }) => {
-  const [activeTab, setActiveTab] = useState<'tasks' | 'money'>('tasks');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'money'>('money');
   const [searchQuery, setSearchQuery] = useState('');
   const contribution = contributions[0];
   const isPaid = contribution?.contributorsPaid.includes(currentPersona.id);
@@ -52,62 +52,48 @@ export const ContributionsSection: React.FC<ContributionsSectionProps> = ({
   return (
     <section id="responsibilities-section" className="scroll-mt-20">
       {/* Section Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-        <div>
-          <h2 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight leading-tight">
-            Responsibilities & Money Pool
-          </h2>
-          <p className="text-xs sm:text-sm text-[#808897] mt-0.5">
-            Who is handling what · Progress and shared costs
-          </p>
-        </div>
-
-        {/* Tab switch pills matching design system */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setActiveTab('tasks')}
-            className={`px-5 py-2 rounded-full text-xs transition cursor-pointer whitespace-nowrap ${
-              activeTab === 'tasks'
-                ? 'bg-[#ECEFF3] text-[#1A1B25] font-bold border border-transparent'
-                : 'bg-white border border-[#DFE1E6] text-[#666D80] font-semibold hover:bg-[#F6F8FA]'
-            }`}
-          >
-            Tasks & Volunteers ({tasks.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('money')}
-            className={`px-5 py-2 rounded-full text-xs transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              activeTab === 'money'
-                ? 'bg-[#ECEFF3] text-[#1A1B25] font-bold border border-transparent'
-                : 'bg-white border border-[#DFE1E6] text-[#666D80] font-semibold hover:bg-[#F6F8FA]'
-            }`}
-          >
-            <CreditCard className="w-3.5 h-3.5 text-[#666D80]" />
-            <span>Money Pool</span>
-          </button>
-        </div>
+      <div>
+        <h2 className="text-xl sm:text-2xl font-bold text-[#1A1B25]">
+          Responsibilities & Money Pool
+        </h2>
+        <p className="text-sm text-[#808897] mt-1 font-normal">
+          Who is handling what · Progress and shared costs
+        </p>
       </div>
 
-      {activeTab === 'tasks' ? (
+      {/* Tabs */}
+      <div className="flex items-center gap-3 mt-4">
+        <button
+          type="button"
+          onClick={() => setActiveTab('attendance')}
+          className={`px-5 py-2.5 rounded-full text-sm font-semibold transition cursor-pointer select-none ${
+            activeTab === 'attendance'
+              ? 'bg-[#ECEFF3] text-[#1A1B25] font-bold'
+              : 'border border-[#DFE1E6] bg-white text-[#555A68] hover:text-[#1A1B25]'
+          }`}
+        >
+          Attendance
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('money')}
+          className={`px-5 py-2.5 rounded-full text-sm font-bold transition cursor-pointer select-none ${
+            activeTab === 'money'
+              ? 'bg-[#ECEFF3] text-[#1A1B25]'
+              : 'border border-[#DFE1E6] bg-white text-[#555A68] hover:text-[#1A1B25]'
+          }`}
+        >
+          Money Pool
+        </button>
+      </div>
+
+      {activeTab === 'attendance' || activeTab === 'money' ? (
         tasks.length === 0 ? (
-          <div className="w-full py-16 sm:py-24 flex flex-col items-center justify-center text-center select-none">
-            <CheckSquare className="w-9 h-9 text-[#272835] stroke-[2.2] mb-4" />
-            <h3 className="text-xl sm:text-2xl font-bold text-[#272835] tracking-tight leading-snug mb-2">
-              No tasks or duties yet
-            </h3>
-            <p className="text-sm sm:text-base text-[#808897] font-normal tracking-normal max-w-lg leading-relaxed">
-              Create responsibilities and assign volunteers so everyone knows what they&apos;re handling
+          <div className="bg-[#F6F8FA] rounded-3xl py-16 sm:py-20 px-6 flex flex-col items-center justify-center text-center mt-5 select-none">
+            <CheckSquare className="w-8 h-8 text-[#A4ABB8] stroke-[1.5] mb-3" />
+            <p className="text-sm font-semibold text-[#808897]">
+              No duties or task yet
             </p>
-            <button
-              type="button"
-              onClick={onOpenCreateItem}
-              className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white text-sm font-bold transition cursor-pointer shadow-xs active:scale-95"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>Add Task</span>
-            </button>
           </div>
         ) : (
           <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#F6F8FA] shadow-[3px_4px_20px_0px_#ECEFF3]">

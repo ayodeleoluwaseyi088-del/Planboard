@@ -12,7 +12,8 @@ import {
   ChevronRight,
   RotateCcw,
   RotateCw,
-  Trophy
+  Trophy,
+  Scale
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
@@ -26,9 +27,11 @@ import {
   TaskItem 
 } from '../types';
 import { calculateCollectiveFunDecision } from '../utils/deciderCollective';
+import { getSingleWinningOption } from '../utils/planSync';
 import { WheelSpinnerDecider } from './WheelSpinnerDecider';
 import { BlindPickDecider } from './BlindPickDecider';
 import { VotedPillBadge } from './SelectionBadge';
+import { getDecisionCountdown } from '../utils/dateTime';
 
 interface DecisionsSectionProps {
   decisions: DecisionItem[];
@@ -108,6 +111,56 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
   const touchEndXRef = useRef<number | null>(null);
 
   const getMember = (id: string) => allMembers.find((m) => m.id === id);
+
+  // Live 1-second clock for precise decision deadlines and countdowns
+  const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Helper to resolve deadline, live countdown, and expiration status for any decision
+  const resolveDecisionDeadline = (
+    deadlineIso?: string,
+    deadlineText?: string,
+    planDateTime?: string,
+    isReopened?: boolean
+  ) => {
+    const iso = deadlineIso || planDateTime;
+    let targetDate: Date | null = null;
+    if (iso) {
+      const d = new Date(iso);
+      if (!isNaN(d.getTime())) targetDate = d;
+    }
+    if (!targetDate && deadlineText) {
+      const match = deadlineText.match(/before\s+([0-9]{1,2}:[0-9]{2}\s*(?:AM|PM|am|pm)?),?\s*([A-Za-z]+(?:\s+[0-9]{1,2})?(?:\s+[A-Za-z]+)?(?:\s+[0-9]{4})?)/i);
+      if (match) {
+        const candidate = new Date(`${match[2]} ${match[1]}`);
+        if (!isNaN(candidate.getTime())) targetDate = candidate;
+      }
+    }
+
+    if (!targetDate) {
+      return {
+        hasDeadline: false,
+        isExpired: false,
+        countdown: null,
+        deadlineDate: null,
+      };
+    }
+
+    const countdown = getDecisionCountdown(targetDate, currentTime);
+    const isExpired = Boolean(countdown?.isExpired && !isReopened);
+
+    return {
+      hasDeadline: true,
+      isExpired,
+      countdown,
+      deadlineDate: targetDate,
+    };
+  };
 
   // 1. Separate actionable plans by decider type
   const wheelPlans = plans.filter((p) => p.deciderType === 'wheel_spinner');
@@ -269,17 +322,59 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
     // Real number of participants currently on the board (same data source as People section)
     const boardParticipantCount = allMembers.length > 0 ? allMembers.length : 1;
     const remainingVoters = Math.max(0, boardParticipantCount - totalVotes);
+
+    // Resolve specific decision deadline and live countdown
+    const matchingPlan = plans.find((p) => p.id === decision.planId || p.deciderItemId === decision.id || p.title.toLowerCase() === decision.title.toLowerCase());
+    const deadlineInfo = resolveDecisionDeadline(
+      decision.deadlineIso,
+      decision.deadlineText,
+      matchingPlan?.dateTime,
+      decision.isReopened
+    );
+    const isExpired = deadlineInfo.isExpired;
     const isCompleted = decision.status === 'completed' || !!decision.finalDecision;
-    const isRoundComplete = isCompleted || (boardParticipantCount > 0 && totalVotes >= boardParticipantCount);
+    const isAllVotesIn = boardParticipantCount > 0 && totalVotes >= boardParticipantCount;
+    const isRoundComplete = isCompleted || isAllVotesIn;
+    const isParticipationClosed = isCompleted || isExpired || isAllVotesIn;
     const isAdminOrOwner = currentPersona.role === 'owner' || currentPersona.role === 'admin';
-    const canShowReopen = isAdminOrOwner && isRoundComplete;
     const userVotedOption = decision.options.find((opt) =>
       opt.voterIds.includes(currentPersona.id)
     );
 
-    // Find current lead
-    const sortedOptions = [...decision.options].sort((a, b) => b.voteCount - a.voteCount);
-    const leader = sortedOptions[0];
+    // WINNER CALCULATION: Strictly ONE winner based on the highest number of valid votes
+    // Core rule: one voting round -> one winner.
+    // Ties: do not select multiple winners automatically; show tie state and let Admin/Owner resolve or re-open.
+    const { winner: voteWinner, isTie: isVoteTie, tiedLeaders, topVoteCount } = getSingleWinningOption(decision.options);
+
+    // Check if an option has been explicitly chosen/finalized by Admin/Owner
+    const explicitFinalOption = decision.options.find(
+      (opt) =>
+        userFinalizedMap[decision.id] === opt.id ||
+        (decision.finalDecision && (decision.finalDecision.startsWith(opt.label) || decision.finalDecision.includes(opt.label)))
+    );
+
+    const isVotingConcluded = isCompleted || isExpired || isAllVotesIn || Boolean(explicitFinalOption);
+
+    let singleWinnerOption: typeof decision.options[0] | null = null;
+    let isTie = false;
+
+    if (explicitFinalOption) {
+      // 1. Explicit admin finalization takes highest precedence and designates exactly this single winner
+      singleWinnerOption = explicitFinalOption;
+      isTie = false;
+    } else if (isVotingConcluded) {
+      if (isVoteTie) {
+        // 2. Voting concluded with a tie: do not mark multiple options as winners!
+        isTie = true;
+        singleWinnerOption = null;
+      } else if (voteWinner && voteWinner.voteCount > 0) {
+        // 3. Exactly one option has the highest valid vote count
+        singleWinnerOption = voteWinner;
+        isTie = false;
+      }
+    }
+
+    const canShowReopen = isAdminOrOwner && (isRoundComplete || isExpired || isTie);
 
     // Format category meta to match reference layout ([Emoji] [Category/Title])
     const cat = decision.category || '';
@@ -302,9 +397,10 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
       categoryLabel = rawText.charAt(0).toUpperCase() + rawText.slice(1).toLowerCase();
     }
 
-    // Format deadline to match reference badge ("6hrs left")
+    // Format deadline to match reference badge
     const getDeadlineBadgeText = () => {
       if (isCompleted) return 'Finalized';
+      if (isExpired) return 'Closed';
       const lower = (decision.deadlineText || '').toLowerCase();
       if (lower.includes('closes') || lower.includes('friday') || lower.includes('tomorrow') || !decision.deadlineText) {
         return '6hrs left';
@@ -322,7 +418,7 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
         className="w-full bg-white rounded-[28px] sm:rounded-[32px] p-6 sm:p-8 flex flex-col justify-between select-none shadow-[0_16px_40px_-12px_rgba(26,27,37,0.08),0_4px_16px_-4px_rgba(26,27,37,0.03)] border border-[#ECEFF3]/60"
       >
         <div>
-          {/* Card Top Meta: Redesigned matching reference image */}
+          {/* Card Top Meta: Category + Live Countdown / Deadline / Tie Pill */}
           <div className="flex items-center justify-between gap-3 mb-4">
             {/* Left: Emoji + Category Title */}
             <div className="flex items-center gap-2.5">
@@ -334,11 +430,32 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
               </span>
             </div>
 
-            {/* Right: Soft amber pill badge matching reference (e.g. "6hrs left") */}
+            {/* Right: Live Countdown, Tie, or Closed pill badge */}
             <div className="flex items-center gap-2">
               {isCompleted ? (
                 <span className="px-3.5 py-1 rounded-full bg-[#00C8B3] text-white text-xs font-bold whitespace-nowrap shadow-2xs">
                   Finalized ✓
+                </span>
+              ) : isTie ? (
+                <span className="px-3.5 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-900 text-xs sm:text-sm font-bold whitespace-nowrap flex items-center gap-1.5 shadow-2xs">
+                  <Scale className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Tie (Resolve)</span>
+                </span>
+              ) : isExpired ? (
+                <span className="px-3.5 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm font-bold whitespace-nowrap flex items-center gap-1.5 shadow-2xs">
+                  <Clock className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Closed (Deadline Reached)</span>
+                </span>
+              ) : isAllVotesIn ? (
+                <span className="px-3.5 py-1 rounded-full bg-[#00C8B3] text-white text-xs font-bold whitespace-nowrap shadow-2xs">
+                  Voting Concluded ✓
+                </span>
+              ) : deadlineInfo.hasDeadline && deadlineInfo.countdown ? (
+                <span className={`px-3.5 py-1 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap flex items-center gap-1.5 shadow-2xs ${
+                  deadlineInfo.countdown.isImminent ? 'bg-rose-100 text-rose-800 animate-pulse' : 'bg-[#FAF4EB] text-[#CA7A18]'
+                }`}>
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>{deadlineInfo.countdown.label}</span>
                 </span>
               ) : (
                 <span className="px-3.5 py-1 rounded-full bg-[#FAF4EB] text-[#CA7A18] text-xs sm:text-sm font-bold whitespace-nowrap">
@@ -349,44 +466,44 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
           </div>
 
           {/* Question Title */}
-          <h3 className="text-xl sm:text-2xl font-black text-[#1A1B25] tracking-tight leading-snug mb-3">
+          <h3 className="text-xl sm:text-2xl font-black text-[#1A1B25] tracking-tight leading-snug mb-2">
             {decision.question}
           </h3>
 
+          {/* Decision Specific Deadline Line */}
+          {decision.deadlineText && (
+            <div className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#808897] mb-3">
+              <Clock className="w-3.5 h-3.5 text-[#CA7A18]" />
+              <span>{decision.deadlineText}</span>
+            </div>
+          )}
+
           {/* Options List matching exact attached reference images */}
-          <div className="space-y-4 mb-6 pt-3">
+          <div className="space-y-4 mb-6 pt-1">
             {decision.options.map((option) => {
               const isUserChoice = option.voterIds.includes(currentPersona.id);
               const votePercentage = totalVotes > 0 ? Math.round((option.voteCount / totalVotes) * 100) : 0;
 
-              const isBoardCompleted = isCompleted || decision.status === 'completed';
-              const isBoardFinalChoice = isBoardCompleted && Boolean(decision.finalDecision?.includes(option.label));
-              const isUserFinalized = userFinalizedMap[decision.id] === option.id;
-              const isThisOptionFinalized = isUserFinalized || isBoardFinalChoice;
+              // Only the single declared winner is marked as winner!
+              // Do not mark all selected/voted options as winners.
+              const isSingleWinner = Boolean(singleWinnerOption && singleWinnerOption.id === option.id);
 
-              // Winner calculation when all eligible users currently on the board have concluded
-              const totalNeeded = boardParticipantCount;
-              const isAllConcluded = totalVotes >= totalNeeded || isBoardCompleted;
-              const sortedOptions = [...decision.options].sort((a, b) => b.voteCount - a.voteCount);
-              const leader = sortedOptions[0];
-              const isWinner = isAllConcluded && Boolean(leader && leader.voteCount > 0 && leader.id === option.id);
-
-              // Crown indicator: represents either user's finalised choice or collective winner
-              const showCrown = isThisOptionFinalized || isWinner;
+              // Crown indicator: strictly on the single winner
+              const showCrown = isSingleWinner;
 
               // Voted pill indicator: represents user's active vote
               const showVotedPill = isUserChoice;
 
-              // Seal styling: green (#00C8B3) when finalised or winner, dark (#272835) otherwise
-              const isSealGreen = isThisOptionFinalized || isWinner;
+              // Seal styling: green (#00C8B3) when single winner, dark (#272835) otherwise
+              const isSealGreen = isSingleWinner;
 
-              // Container styling: amber (#FFF6E9 / #FBB94F) when user voted (Image 3), white (#FFFFFF / #F6F8FA) otherwise (Image 1 & 2)
+              // Container styling: amber (#FFF6E9 / #FBB94F) when user voted, white otherwise
               const isContainerAmber = showVotedPill;
 
               const handleToggleFinalize = (e: React.MouseEvent) => {
                 e.stopPropagation();
 
-                if (isThisOptionFinalized) {
+                if (isSingleWinner && explicitFinalOption?.id === option.id) {
                   // Undo finalisation
                   setUserFinalizedMap((prev) => {
                     const next = { ...prev };
@@ -395,7 +512,7 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
                   });
                   onFinalizeDecision(decision.id, option.id);
                 } else {
-                  // Finalise option
+                  // Finalise this single option as the winner!
                   setUserFinalizedMap((prev) => ({
                     ...prev,
                     [decision.id]: option.id,
@@ -409,12 +526,14 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
                 <div
                   key={option.id}
                   onClick={() => {
-                    if (!isBoardCompleted) {
+                    if (!isParticipationClosed) {
                       onVote(decision.id, option.id);
                       confetti({ particleCount: 35, spread: 55, origin: { y: 0.8 } });
                     }
                   }}
-                  className={`relative rounded-[22px] px-5 py-4 sm:px-6 sm:py-4.5 transition cursor-pointer select-none border-2 ${
+                  className={`relative rounded-[22px] px-5 py-4 sm:px-6 sm:py-4.5 transition select-none border-2 ${
+                    isParticipationClosed ? 'cursor-default' : 'cursor-pointer'
+                  } ${
                     isContainerAmber
                       ? 'bg-[#FFF6E9] border-[#FBB94F]'
                       : 'bg-[#FFFFFF] border-[#F6F8FA] hover:border-[#DFE1E6]'
@@ -495,7 +614,7 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
                           type="button"
                           onClick={handleToggleFinalize}
                           className="w-7 h-7 sm:w-7.5 sm:h-7.5 flex items-center justify-center cursor-pointer active:scale-90 hover:scale-105 transition-all shrink-0 ml-2.5 sm:ml-3 rounded-full focus:outline-none select-none"
-                          title={isThisOptionFinalized ? "Undo finalisation" : "Finalise this choice"}
+                          title={isSingleWinner ? "Undo finalisation" : "Finalise this choice"}
                         >
                           <svg
                             viewBox="0 0 24 24"
@@ -579,13 +698,23 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
       ? plan.participantSelections[currentPersona.id] 
       : undefined;
     const hasSpun = Boolean(mySelection);
+
+    // Resolve specific decision deadline and live countdown
+    const deadlineInfo = resolveDecisionDeadline(
+      plan.deadlineIso,
+      plan.deadlineText,
+      plan.dateTime,
+      plan.isReopened
+    );
+    const isExpired = deadlineInfo.isExpired;
     const isCompleted = plan.status === 'confirmed' && Boolean(plan.finalDecision || plan.wheelWinningOption);
     const isRoundComplete = 
       (tally.totalEligible > 0 && tally.completedCount >= tally.totalEligible) || isCompleted;
+    const canShowReopen = isAdminOrOwner && (isRoundComplete || isExpired);
 
-    // Determine collective winner option (only active once all participants completed or round finalized)
+    // Determine collective winner option (active if round complete, finalized, or deadline expired)
     let winnerOption: string | null = null;
-    if (isRoundComplete) {
+    if (isRoundComplete || isExpired) {
       if (plan.wheelWinningOption) {
         winnerOption = plan.wheelWinningOption;
       } else if (plan.finalDecision) {
@@ -597,6 +726,8 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
         winnerOption = tally.winner.option;
       } else if (tally.leader) {
         winnerOption = tally.leader.option;
+      } else if (plan.spinnerOptions && plan.spinnerOptions.length > 0) {
+        winnerOption = plan.spinnerOptions[0];
       }
     }
 
@@ -626,67 +757,113 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
           className="w-full bg-white rounded-[28px] sm:rounded-[32px] p-6 sm:p-8 flex flex-col justify-between select-none shadow-[0_16px_40px_-12px_rgba(26,27,37,0.08),0_4px_16px_-4px_rgba(26,27,37,0.03)] border border-[#ECEFF3]/60"
         >
           <div>
-            {/* Header: Wheel Spinner Graphic & Title */}
-            <div className="flex items-center gap-3 mb-2 select-none">
-              <svg
-                viewBox="0 0 36 38"
-                className="w-7 h-7 sm:w-8 sm:h-8 shrink-0"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                aria-hidden="true"
-              >
-                {/* Stand Post & Base */}
-                <rect x="16.5" y="27" width="3" height="4.5" fill="#64748B" />
-                <path d="M11.5 35 L13.5 31.5 H22.5 L24.5 35 Z" fill="#94A3B8" />
-                <rect x="9.5" y="34.5" width="17" height="2.5" rx="1.25" fill="#64748B" />
+            {/* Header: Wheel Spinner Graphic & Title + Top Right Live Countdown Pill */}
+            <div className="flex items-center justify-between gap-3 mb-2 select-none">
+              <div className="flex items-center gap-3">
+                <svg
+                  viewBox="0 0 36 38"
+                  className="w-7 h-7 sm:w-8 sm:h-8 shrink-0"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  {/* Stand Post & Base */}
+                  <rect x="16.5" y="27" width="3" height="4.5" fill="#64748B" />
+                  <path d="M11.5 35 L13.5 31.5 H22.5 L24.5 35 Z" fill="#94A3B8" />
+                  <rect x="9.5" y="34.5" width="17" height="2.5" rx="1.25" fill="#64748B" />
 
-                {/* Wheel Outer Gold Rim */}
-                <circle cx="18" cy="16.5" r="12" fill="#F5A623" />
-                <circle cx="18" cy="16.5" r="11.5" fill="#FBBF24" />
+                  {/* Wheel Outer Gold Rim */}
+                  <circle cx="18" cy="16.5" r="12" fill="#F5A623" />
+                  <circle cx="18" cy="16.5" r="11.5" fill="#FBBF24" />
 
-                {/* Wheel Inner Base (White) */}
-                <circle cx="18" cy="16.5" r="9.5" fill="#FFFFFF" />
+                  {/* Wheel Inner Base (White) */}
+                  <circle cx="18" cy="16.5" r="9.5" fill="#FFFFFF" />
 
-                {/* 8 Colorful Wedges */}
-                <path d="M18 16.5 L21.64 7.72 A9.5 9.5 0 0 1 26.78 12.86 Z" fill="#EF4444" />
-                <path d="M18 16.5 L26.78 12.86 A9.5 9.5 0 0 1 26.78 20.14 Z" fill="#F97316" />
-                <path d="M18 16.5 L26.78 20.14 A9.5 9.5 0 0 1 21.64 25.28 Z" fill="#FBBF24" />
-                <path d="M18 16.5 L21.64 25.28 A9.5 9.5 0 0 1 14.36 25.28 Z" fill="#10B981" />
-                <path d="M18 16.5 L14.36 25.28 A9.5 9.5 0 0 1 9.22 20.14 Z" fill="#0EA5E9" />
-                <path d="M18 16.5 L9.22 20.14 A9.5 9.5 0 0 1 9.22 12.86 Z" fill="#8B5CF6" />
-                <path d="M18 16.5 L9.22 12.86 A9.5 9.5 0 0 1 14.36 7.72 Z" fill="#EC4899" />
-                <path d="M18 16.5 L14.36 7.72 A9.5 9.5 0 0 1 18 7 Z" fill="#06B6D4" />
+                  {/* 8 Colorful Wedges */}
+                  <path d="M18 16.5 L21.64 7.72 A9.5 9.5 0 0 1 26.78 12.86 Z" fill="#EF4444" />
+                  <path d="M18 16.5 L26.78 12.86 A9.5 9.5 0 0 1 26.78 20.14 Z" fill="#F97316" />
+                  <path d="M18 16.5 L26.78 20.14 A9.5 9.5 0 0 1 21.64 25.28 Z" fill="#FBBF24" />
+                  <path d="M18 16.5 L21.64 25.28 A9.5 9.5 0 0 1 14.36 25.28 Z" fill="#10B981" />
+                  <path d="M18 16.5 L14.36 25.28 A9.5 9.5 0 0 1 9.22 20.14 Z" fill="#0EA5E9" />
+                  <path d="M18 16.5 L9.22 20.14 A9.5 9.5 0 0 1 9.22 12.86 Z" fill="#8B5CF6" />
+                  <path d="M18 16.5 L9.22 12.86 A9.5 9.5 0 0 1 14.36 7.72 Z" fill="#EC4899" />
+                  <path d="M18 16.5 L14.36 7.72 A9.5 9.5 0 0 1 18 7 Z" fill="#06B6D4" />
 
-                {/* Pegs around the rim */}
-                <circle cx="27.9" cy="20.6" r="0.75" fill="#D97706" />
-                <circle cx="22.1" cy="26.4" r="0.75" fill="#D97706" />
-                <circle cx="13.9" cy="26.4" r="0.75" fill="#D97706" />
-                <circle cx="8.1" cy="20.6" r="0.75" fill="#D97706" />
-                <circle cx="8.1" cy="12.4" r="0.75" fill="#D97706" />
-                <circle cx="13.9" cy="6.6" r="0.75" fill="#D97706" />
-                <circle cx="22.1" cy="6.6" r="0.75" fill="#D97706" />
-                <circle cx="27.9" cy="12.4" r="0.75" fill="#D97706" />
+                  {/* Pegs around the rim */}
+                  <circle cx="27.9" cy="20.6" r="0.75" fill="#D97706" />
+                  <circle cx="22.1" cy="26.4" r="0.75" fill="#D97706" />
+                  <circle cx="13.9" cy="26.4" r="0.75" fill="#D97706" />
+                  <circle cx="8.1" cy="20.6" r="0.75" fill="#D97706" />
+                  <circle cx="8.1" cy="12.4" r="0.75" fill="#D97706" />
+                  <circle cx="13.9" cy="6.6" r="0.75" fill="#D97706" />
+                  <circle cx="22.1" cy="6.6" r="0.75" fill="#D97706" />
+                  <circle cx="27.9" cy="12.4" r="0.75" fill="#D97706" />
 
-                {/* Center Hub */}
-                <circle cx="18" cy="16.5" r="3" fill="#334155" />
-                <circle cx="18" cy="16.5" r="1.2" fill="#E2E8F0" />
+                  {/* Center Hub */}
+                  <circle cx="18" cy="16.5" r="3" fill="#334155" />
+                  <circle cx="18" cy="16.5" r="1.2" fill="#E2E8F0" />
 
-                {/* Blue Needle / Pointer at 12 o'clock */}
-                <path
-                  d="M16.5 4.5 C16.5 3.67 17.17 3 18 3 C18.83 3 19.5 3.67 19.5 4.5 C19.5 5.6 18 8.8 18 8.8 C18 8.8 16.5 5.6 16.5 4.5 Z"
-                  fill="#0284C7"
-                />
-                <circle cx="18" cy="4.5" r="0.6" fill="#BAE6FD" />
-              </svg>
-              <span className="text-xl sm:text-[22px] font-black text-[#1A1B25] tracking-tight leading-none font-sans">
-                Wheel Spinner
-              </span>
+                  {/* Blue Needle / Pointer at 12 o'clock */}
+                  <path
+                    d="M16.5 4.5 C16.5 3.67 17.17 3 18 3 C18.83 3 19.5 3.67 19.5 4.5 C19.5 5.6 18 8.8 18 8.8 C18 8.8 16.5 5.6 16.5 4.5 Z"
+                    fill="#0284C7"
+                  />
+                  <circle cx="18" cy="4.5" r="0.6" fill="#BAE6FD" />
+                </svg>
+                <span className="text-xl sm:text-[22px] font-black text-[#1A1B25] tracking-tight leading-none font-sans">
+                  Wheel Spinner
+                </span>
+              </div>
+
+              {/* Right: Live Countdown or Closed pill badge */}
+              <div className="flex items-center gap-2">
+                {isCompleted ? (
+                  <span className="px-3.5 py-1 rounded-full bg-[#00C8B3] text-white text-xs font-bold whitespace-nowrap shadow-2xs">
+                    Finalized ✓
+                  </span>
+                ) : isExpired ? (
+                  <span className="px-3.5 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm font-bold whitespace-nowrap flex items-center gap-1.5 shadow-2xs">
+                    <Clock className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Closed (Deadline Reached)</span>
+                  </span>
+                ) : deadlineInfo.hasDeadline && deadlineInfo.countdown ? (
+                  <span className={`px-3.5 py-1 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap flex items-center gap-1.5 shadow-2xs ${
+                    deadlineInfo.countdown.isImminent ? 'bg-rose-100 text-rose-800 animate-pulse' : 'bg-[#FAF4EB] text-[#CA7A18]'
+                  }`}>
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>{deadlineInfo.countdown.label}</span>
+                  </span>
+                ) : null}
+              </div>
             </div>
 
             {/* Question */}
-            <h3 className="text-2xl sm:text-[26px] font-black text-[#1A1B25] tracking-tight leading-snug mt-5 mb-5 font-sans">
+            <h3 className="text-2xl sm:text-[26px] font-black text-[#1A1B25] tracking-tight leading-snug mt-5 mb-2 font-sans">
               {plan.spinnerQuestion || plan.title}
             </h3>
+
+            {/* Decision Specific Deadline Line */}
+            {plan.deadlineText && (
+              <div className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#808897] mb-3">
+                <Clock className="w-3.5 h-3.5 text-[#CA7A18]" />
+                <span>{plan.deadlineText}</span>
+              </div>
+            )}
+
+            {/* Auto-Finalized Winner Banner upon Deadline Reached */}
+            {isExpired && !isCompleted && winnerOption && (
+              <div className="mb-4 p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-950 text-xs sm:text-sm font-semibold flex items-center justify-between gap-2 shadow-2xs animate-in fade-in duration-200">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Trophy className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span className="truncate">
+                    Deadline reached. Wheel spinning closed. Final result: <strong>{winnerOption}</strong>.
+                  </span>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[11px] font-black shrink-0">
+                  Final Result
+                </span>
+              </div>
+            )}
 
             {/* Options Preview Pills (Images 1–3 strictly matched) */}
             <div className="flex flex-wrap items-center gap-3 my-5 sm:my-6 select-none">
@@ -699,16 +876,15 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
                   <div
                     key={opt}
                     className={`relative inline-flex items-center gap-2.5 px-4.5 py-2.5 sm:px-5 sm:py-3 rounded-full transition-all select-none ${
-                      isMyPick
+                      isMyPick || isCollectiveWinner
                         ? 'bg-[#FFF6E9] border-2 border-[#F5A623] shadow-2xs'
                         : 'bg-white border border-[#ECEFF3] shadow-2xs'
                     }`}
                   >
                     {/* Floating Badges at top-right edge */}
                     {isBoth ? (
-                      /* Image 3: Both Selected Option + Collective Winner */
+                      /* Both Selected Option + Collective Winner */
                       <div className="absolute -top-2.5 right-2 z-10 flex items-center gap-1 pointer-events-none">
-                        {/* Crown Badge */}
                         <div
                           className="w-5.5 h-5.5 rounded-full bg-[#E58A13] flex items-center justify-center shadow-xs"
                           title="Collective Winner"
@@ -720,7 +896,6 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
                             <circle cx="21" cy="4.5" r="1.5" />
                           </svg>
                         </div>
-                        {/* Checkmark Badge */}
                         <div
                           className="w-5.5 h-5.5 rounded-full bg-[#E58A13] flex items-center justify-center shadow-xs"
                           title="Your Pick"
@@ -729,7 +904,6 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
                         </div>
                       </div>
                     ) : isMyPick ? (
-                      /* Image 1: Selected Option Only */
                       <div
                         className="absolute -top-2.5 right-2 z-10 w-5.5 h-5.5 rounded-full bg-[#E58A13] flex items-center justify-center shadow-xs pointer-events-none"
                         title="Your Pick"
@@ -737,7 +911,6 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
                         <Check className="w-3.5 h-3.5 stroke-[3] text-white" />
                       </div>
                     ) : isCollectiveWinner ? (
-                      /* Image 2: Collective Winner Only */
                       <div
                         className="absolute -top-2.5 right-2 z-10 w-5.5 h-5.5 rounded-full bg-[#E58A13] flex items-center justify-center shadow-xs pointer-events-none"
                         title="Collective Winner"
@@ -766,14 +939,21 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
               })}
             </div>
 
-            {/* Action Button (Images 1–3 reference) */}
+            {/* Action Button: Disabled when Expired */}
             <button
               type="button"
-              onClick={() => setActiveWheelPlan(plan)}
-              className="w-full py-4 px-6 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white text-base font-bold transition cursor-pointer shadow-xs active:scale-[0.99] flex items-center justify-center mt-2 mb-6 select-none font-sans"
+              onClick={() => {
+                if (!isExpired) setActiveWheelPlan(plan);
+              }}
+              disabled={isExpired}
+              className={`w-full py-4 px-6 rounded-full text-base font-bold transition flex items-center justify-center mt-2 mb-6 select-none font-sans ${
+                isExpired
+                  ? 'bg-[#DFE1E6] text-[#808897] cursor-not-allowed shadow-none'
+                  : 'bg-[#1A1B25] hover:bg-[#272835] text-white cursor-pointer shadow-xs active:scale-[0.99]'
+              }`}
             >
               <span>
-                {hasSpun ? 'View Collective Result & Wheel' : 'Spin the Wheel (1 Turn)'}
+                {isExpired ? 'Participation Closed (Deadline reached)' : hasSpun ? 'View Collective Result & Wheel' : 'Spin the Wheel (1 Turn)'}
               </span>
             </button>
           </div>
@@ -784,15 +964,15 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
               {tally.completedCount}/{tally.totalEligible} participated
             </span>
 
-            {isAdminOrOwner && (
+            {canShowReopen && (
               <button
                 type="button"
                 onClick={() => onReopenFunDecider && onReopenFunDecider(plan.id)}
                 className="flex items-center gap-1.5 text-sm font-bold text-[#1A1B25] hover:text-black transition cursor-pointer active:scale-95 select-none"
-                title="Re-open round for all participants"
+                title="Re-open decision for all participants"
               >
                 <RotateCw className="w-4 h-4 stroke-[2.5]" />
-                <span>Re-open Round</span>
+                <span>Re-open Decision</span>
               </button>
             )}
           </div>
@@ -810,10 +990,48 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
       ? plan.participantSelections[currentPersona.id] 
       : undefined;
     const hasPicked = Boolean(mySelection);
-    const isCompleted = plan.status === 'confirmed' && Boolean(plan.finalDecision);
-    const pickedOption = mySelection?.option || plan.currentSelection || (isCompleted ? plan.finalDecision : null);
+
+    // Resolve specific decision deadline and live countdown
+    const deadlineInfo = resolveDecisionDeadline(
+      plan.deadlineIso,
+      plan.deadlineText,
+      plan.dateTime,
+      plan.isReopened
+    );
+    const isExpired = deadlineInfo.isExpired;
+    const isCompleted = plan.status === 'confirmed' && Boolean(plan.finalDecision || plan.wheelWinningOption);
+
+    // Auto-finalized / determined winner upon deadline expiration
+    let expiredWinnerOption: string | null = null;
+    if (isExpired) {
+      expiredWinnerOption =
+        plan.wheelWinningOption ||
+        plan.finalDecision ||
+        plan.currentSelection ||
+        (plan.spinnerOptions && plan.spinnerOptions.length > 0 ? plan.spinnerOptions[0] : null);
+    }
+
+    // Participant-specific revealed card state:
+    // 1. Current user has picked -> show current user's own picked card
+    // 2. Entire decision completed/finalized -> show finalized outcome
+    // 3. Deadline expired -> show determined pick
+    // 4. Pre-pick state (current user has NOT picked) -> NO revealed card; show standard pre-pick UI
+    let revealedCardOption: string | null = null;
+    let revealedCardLabel = 'Your pick';
+
+    if (hasPicked && mySelection?.option) {
+      revealedCardOption = mySelection.option;
+      revealedCardLabel = 'Your pick';
+    } else if (isCompleted) {
+      revealedCardOption = plan.wheelWinningOption || plan.finalDecision || plan.currentSelection || null;
+      revealedCardLabel = 'Final decision';
+    } else if (isExpired && expiredWinnerOption) {
+      revealedCardOption = expiredWinnerOption;
+      revealedCardLabel = 'Determined pick';
+    }
+
     const isRoundComplete = (tally.totalEligible > 0 && tally.completedCount >= tally.totalEligible) || isCompleted;
-    const canShowReopen = isAdminOrOwner && isRoundComplete;
+    const canShowReopen = isAdminOrOwner && (isRoundComplete || isExpired);
 
     return (
       <div key={plan.id} className="relative w-full">
@@ -826,80 +1044,139 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
           className="w-full bg-white rounded-[28px] sm:rounded-[32px] p-6 sm:p-8 flex flex-col justify-between select-none shadow-[0_16px_40px_-12px_rgba(26,27,37,0.08),0_4px_16px_-4px_rgba(26,27,37,0.03)] border border-[#ECEFF3]/60"
         >
           <div>
-            {/* Header: Blind Pick Fanned Cards Icon & Title */}
-            <div className="flex items-center gap-3 mb-2 select-none">
-              <svg
-                viewBox="0 0 28 28"
-                className="w-7 h-7 sm:w-8 sm:h-8 shrink-0"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                aria-hidden="true"
-              >
-                {/* Back Yellow Card */}
-                <rect
-                  x="9"
-                  y="4"
-                  width="13.5"
-                  height="18"
-                  rx="3"
-                  transform="rotate(22 15.75 13)"
-                  fill="#FBBF24"
-                />
-                {/* Middle Cyan Card */}
-                <rect
-                  x="7.5"
-                  y="3.5"
-                  width="13.5"
-                  height="18"
-                  rx="3"
-                  transform="rotate(6 14.25 12.5)"
-                  fill="#06B6D4"
-                />
-                {/* Front Red Card */}
-                <rect
-                  x="4.5"
-                  y="4.5"
-                  width="13.5"
-                  height="18"
-                  rx="3"
-                  transform="rotate(-14 11.25 13.5)"
-                  fill="#EF4444"
-                />
-              </svg>
-              <span className="text-xl sm:text-[22px] font-black text-[#1A1B25] tracking-tight leading-none font-sans">
-                Blind Pick
-              </span>
+            {/* Header: Blind Pick Fanned Cards Icon & Title + Live Countdown Pill */}
+            <div className="flex items-center justify-between gap-3 mb-2 select-none">
+              <div className="flex items-center gap-3">
+                <svg
+                  viewBox="0 0 28 28"
+                  className="w-7 h-7 sm:w-8 sm:h-8 shrink-0"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  {/* Back Yellow Card */}
+                  <rect
+                    x="9"
+                    y="4"
+                    width="13.5"
+                    height="18"
+                    rx="3"
+                    transform="rotate(22 15.75 13)"
+                    fill="#FBBF24"
+                  />
+                  {/* Middle Cyan Card */}
+                  <rect
+                    x="7.5"
+                    y="3.5"
+                    width="13.5"
+                    height="18"
+                    rx="3"
+                    transform="rotate(6 14.25 12.5)"
+                    fill="#06B6D4"
+                  />
+                  {/* Front Red Card */}
+                  <rect
+                    x="4.5"
+                    y="4.5"
+                    width="13.5"
+                    height="18"
+                    rx="3"
+                    transform="rotate(-14 11.25 13.5)"
+                    fill="#EF4444"
+                  />
+                </svg>
+                <span className="text-xl sm:text-[22px] font-black text-[#1A1B25] tracking-tight leading-none font-sans">
+                  Blind Pick
+                </span>
+              </div>
+
+              {/* Right: Live Countdown or Closed pill badge */}
+              <div className="flex items-center gap-2">
+                {isCompleted ? (
+                  <span className="px-3.5 py-1 rounded-full bg-[#00C8B3] text-white text-xs font-bold whitespace-nowrap shadow-2xs">
+                    Finalized ✓
+                  </span>
+                ) : isExpired ? (
+                  <span className="px-3.5 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm font-bold whitespace-nowrap flex items-center gap-1.5 shadow-2xs">
+                    <Clock className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Closed (Deadline Reached)</span>
+                  </span>
+                ) : deadlineInfo.hasDeadline && deadlineInfo.countdown ? (
+                  <span className={`px-3.5 py-1 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap flex items-center gap-1.5 shadow-2xs ${
+                    deadlineInfo.countdown.isImminent ? 'bg-rose-100 text-rose-800 animate-pulse' : 'bg-[#FAF4EB] text-[#CA7A18]'
+                  }`}>
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>{deadlineInfo.countdown.label}</span>
+                  </span>
+                ) : null}
+              </div>
             </div>
 
             {/* Question */}
-            <h3 className="text-2xl sm:text-[26px] font-black text-[#1A1B25] tracking-tight leading-snug mt-5 mb-5 font-sans">
+            <h3 className="text-2xl sm:text-[26px] font-black text-[#1A1B25] tracking-tight leading-snug mt-5 mb-2 font-sans">
               {plan.spinnerQuestion || plan.title}
             </h3>
 
-            {/* Selected Option Card: ONLY displayed after picking, strictly matching reference image */}
-            {pickedOption ? (
+            {/* Decision Specific Deadline Line */}
+            {plan.deadlineText && (
+              <div className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#808897] mb-3">
+                <Clock className="w-3.5 h-3.5 text-[#CA7A18]" />
+                <span>{plan.deadlineText}</span>
+              </div>
+            )}
+
+            {/* Auto-Finalized Winner Banner upon Deadline Reached */}
+            {isExpired && !isCompleted && expiredWinnerOption && (
+              <div className="mb-4 p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-950 text-xs sm:text-sm font-semibold flex items-center justify-between gap-2 shadow-2xs animate-in fade-in duration-200">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Trophy className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span className="truncate">
+                    Deadline reached. Blind pick closed. Final result: <strong>{expiredWinnerOption}</strong>.
+                  </span>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[11px] font-black shrink-0">
+                  Final Result
+                </span>
+              </div>
+            )}
+
+            {/* Selected Option Card: ONLY displayed after picking or when finalized/expired */}
+            {revealedCardOption ? (
               <div className="flex items-center gap-6 my-6 select-none">
                 {/* The single selected card */}
                 <div className="w-[126px] h-[126px] sm:w-[134px] sm:h-[134px] rounded-[24px] bg-gradient-to-b from-[#F5A623] via-[#F37023] to-[#E04B16] flex flex-col items-center justify-center text-center p-3 shrink-0 shadow-xs">
                   <Trophy className="w-9 h-9 text-white stroke-[2.2] mb-1.5 drop-shadow-xs" />
                   <span className="text-lg sm:text-xl font-black text-white tracking-wide truncate max-w-full px-1">
-                    {pickedOption}
+                    {revealedCardOption}
                   </span>
                 </div>
                 {/* Text next to card */}
                 <span className="text-lg sm:text-xl font-semibold text-[#808897] select-none font-sans">
-                  Your pick
+                  {revealedCardLabel}
                 </span>
               </div>
             ) : null}
 
-            {/* Action Button */}
+            {/* Action Button: Disabled when Expired */}
             <button
               type="button"
-              onClick={() => setActiveBlindPickPlan(plan)}
-              className="w-full py-4 px-6 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white text-base font-bold transition cursor-pointer shadow-xs active:scale-[0.99] flex items-center justify-center mt-2 mb-6 select-none font-sans"
+              onClick={() => {
+                if (!isExpired) setActiveBlindPickPlan(plan);
+              }}
+              disabled={isExpired}
+              className={`w-full py-4 px-6 rounded-full text-base font-bold transition flex items-center justify-center mt-2 mb-6 select-none font-sans ${
+                isExpired
+                  ? 'bg-[#DFE1E6] text-[#808897] cursor-not-allowed shadow-none'
+                  : 'bg-[#1A1B25] hover:bg-[#272835] text-white cursor-pointer shadow-xs active:scale-[0.99]'
+              }`}
             >
-              <span>{hasPicked || pickedOption ? 'View Collective Result & Cards' : 'Draw Mystery Card (1 Turn)'}</span>
+              <span>
+                {isExpired
+                  ? 'Participation Closed (Deadline reached)'
+                  : hasPicked || isCompleted
+                  ? 'View Collective Result & Cards'
+                  : 'Draw Mystery Card (1 Turn)'}
+              </span>
             </button>
           </div>
 
@@ -914,10 +1191,10 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
                 type="button"
                 onClick={() => onReopenFunDecider && onReopenFunDecider(plan.id)}
                 className="flex items-center gap-1.5 text-sm font-bold text-[#1A1B25] hover:text-black transition cursor-pointer active:scale-95 select-none"
-                title="Re-open round for all participants"
+                title="Re-open decision for all participants"
               >
                 <RotateCw className="w-4 h-4 stroke-[2.5]" />
-                <span>Re-open Round</span>
+                <span>Re-open Decision</span>
               </button>
             )}
           </div>
@@ -936,6 +1213,17 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
     const myStatus = plan.participantStatuses?.[currentPersona.id];
     const hasResponded = Boolean(myStatus?.statusOptionId);
 
+    // Resolve specific decision deadline and live countdown
+    const deadlineInfo = resolveDecisionDeadline(
+      plan.deadlineIso,
+      plan.deadlineText,
+      plan.dateTime,
+      plan.isReopened
+    );
+    const isExpired = deadlineInfo.isExpired;
+    const isCompleted = recordedEntries.length >= (allMembers.length > 0 ? allMembers.length : 1);
+    const canShowReopen = isAdminOrOwner && (isCompleted || isExpired);
+
     const options = (plan.statusOptions && plan.statusOptions.length >= 2)
       ? plan.statusOptions
       : [
@@ -951,6 +1239,15 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
       if (l === 'not attending' || l === 'not available' || l === 'unavailable') return 'Not available';
       return opt.label;
     };
+
+    // Determine leading result for auto-finalization upon deadline
+    const sortedOptionsByCount = [...options].sort((a, b) => {
+      const countA = recordedEntries.filter((s) => s.statusOptionId === a.id).length;
+      const countB = recordedEntries.filter((s) => s.statusOptionId === b.id).length;
+      return countB - countA;
+    });
+    const topOption = sortedOptionsByCount[0];
+    const topOptionCount = recordedEntries.filter((s) => s.statusOptionId === topOption?.id).length;
 
     const renderStatusOptionIcon = (opt: ParticipantStatusOption) => {
       const l = opt.label.trim().toLowerCase();
@@ -999,45 +1296,91 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
           className="w-full bg-white rounded-[28px] sm:rounded-[32px] p-6 sm:p-8 flex flex-col justify-between select-none shadow-[0_16px_40px_-12px_rgba(26,27,37,0.08),0_4px_16px_-4px_rgba(26,27,37,0.03)] border border-[#ECEFF3]/60"
         >
           <div>
-            {/* Header: Presenter Icon & Title (Images 1 & 2 reference) */}
-            <div className="flex items-center gap-3 select-none">
-              <svg
-                viewBox="0 0 32 32"
-                className="w-7 h-7 sm:w-8 sm:h-8 shrink-0"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                aria-hidden="true"
-              >
-                {/* Tripod legs */}
-                <path d="M19 18 L15 29" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" />
-                <path d="M23 18 L27 29" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" />
-                <path d="M21 18 L21 29" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" />
+            {/* Header: Presenter Icon & Title + Live Countdown / Expiration Pill */}
+            <div className="flex items-center justify-between gap-3 mb-2 select-none">
+              <div className="flex items-center gap-3">
+                <svg
+                  viewBox="0 0 32 32"
+                  className="w-7 h-7 sm:w-8 sm:h-8 shrink-0"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  {/* Tripod legs */}
+                  <path d="M19 18 L15 29" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M23 18 L27 29" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M21 18 L21 29" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" />
 
-                {/* Whiteboard */}
-                <rect x="15" y="7" width="13" height="11" rx="1.5" fill="#FFFFFF" stroke="#38BDF8" strokeWidth="1.5" />
-                {/* Blue top bar on board */}
-                <path d="M15 8.5 C15 7.67 15.67 7 H26.5 C27.33 7 28 7.67 28 8.5 V10 H15 V8.5 Z" fill="#38BDF8" />
-                {/* Horizontal lines on board */}
-                <line x1="18" y1="13" x2="25" y2="13" stroke="#93C5FD" strokeWidth="1.5" strokeLinecap="round" />
-                <line x1="18" y1="15.5" x2="23" y2="15.5" stroke="#93C5FD" strokeWidth="1.5" strokeLinecap="round" />
+                  {/* Whiteboard */}
+                  <rect x="15" y="7" width="13" height="11" rx="1.5" fill="#FFFFFF" stroke="#38BDF8" strokeWidth="1.5" />
+                  {/* Blue top bar on board */}
+                  <path d="M15 8.5 C15 7.67 15.67 7 H26.5 C27.33 7 28 7.67 28 8.5 V10 H15 V8.5 Z" fill="#38BDF8" />
+                  {/* Horizontal lines on board */}
+                  <line x1="18" y1="13" x2="25" y2="13" stroke="#93C5FD" strokeWidth="1.5" strokeLinecap="round" />
+                  <line x1="18" y1="15.5" x2="23" y2="15.5" stroke="#93C5FD" strokeWidth="1.5" strokeLinecap="round" />
 
-                {/* Person Head */}
-                <circle cx="8" cy="10" r="3" fill="#FCA5A5" />
-                {/* Person Body */}
-                <path d="M4 25 C4 20 6 15 10.5 15 C12 15 13 16 13.5 18 L10 25 Z" fill="#EF4444" />
-                {/* Pointer Arm */}
-                <path d="M9 17 L15 13" stroke="#FCA5A5" strokeWidth="2.5" strokeLinecap="round" />
-              </svg>
+                  {/* Person Head */}
+                  <circle cx="8" cy="10" r="3" fill="#FCA5A5" />
+                  {/* Person Body */}
+                  <path d="M4 25 C4 20 6 15 10.5 15 C12 15 13 16 13.5 18 L10 25 Z" fill="#EF4444" />
+                  {/* Pointer Arm */}
+                  <path d="M9 17 L15 13" stroke="#FCA5A5" strokeWidth="2.5" strokeLinecap="round" />
+                </svg>
 
-              <span className="text-xl sm:text-[22px] font-black text-[#1A1B25] tracking-tight leading-none font-sans">
-                Participant Check-in
-              </span>
+                <span className="text-xl sm:text-[22px] font-black text-[#1A1B25] tracking-tight leading-none font-sans">
+                  Participant Check-in
+                </span>
+              </div>
+
+              {/* Right: Live Countdown or Closed pill badge */}
+              <div className="flex items-center gap-2">
+                {isCompleted ? (
+                  <span className="px-3.5 py-1 rounded-full bg-[#00C8B3] text-white text-xs font-bold whitespace-nowrap shadow-2xs">
+                    Completed ✓
+                  </span>
+                ) : isExpired ? (
+                  <span className="px-3.5 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm font-bold whitespace-nowrap flex items-center gap-1.5 shadow-2xs">
+                    <Clock className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Closed (Deadline Reached)</span>
+                  </span>
+                ) : deadlineInfo.hasDeadline && deadlineInfo.countdown ? (
+                  <span className={`px-3.5 py-1 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap flex items-center gap-1.5 shadow-2xs ${
+                    deadlineInfo.countdown.isImminent ? 'bg-rose-100 text-rose-800 animate-pulse' : 'bg-[#FAF4EB] text-[#CA7A18]'
+                  }`}>
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>{deadlineInfo.countdown.label}</span>
+                  </span>
+                ) : null}
+              </div>
             </div>
 
             {/* Question */}
-            <h3 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight leading-snug mt-6 mb-6 font-sans">
+            <h3 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight leading-snug mt-6 mb-2 font-sans">
               {plan.statusQuestion || 'Who will be attending?'}
             </h3>
+
+            {/* Decision Specific Deadline Line */}
+            {plan.deadlineText && (
+              <div className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#808897] mb-3">
+                <Clock className="w-3.5 h-3.5 text-[#CA7A18]" />
+                <span>{plan.deadlineText}</span>
+              </div>
+            )}
+
+            {/* Auto-Finalized Winner Banner upon Deadline Reached */}
+            {isExpired && topOption && (
+              <div className="mb-4 p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-950 text-xs sm:text-sm font-semibold flex items-center justify-between gap-2 shadow-2xs animate-in fade-in duration-200">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Trophy className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span className="truncate">
+                    Deadline reached. Check-in closed. Final result: <strong>{getOptionDisplayLabel(topOption)}</strong> ({topOptionCount} {topOptionCount === 1 ? 'response' : 'responses'}).
+                  </span>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[11px] font-black shrink-0">
+                  Final Result
+                </span>
+              </div>
+            )}
 
             {/* Interactive Options Rows (Images 1 & 2 reference) */}
             <div className="space-y-3.5 my-2">
@@ -1050,13 +1393,16 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
                   <button
                     key={opt.id}
                     type="button"
+                    disabled={isExpired}
                     onClick={() => {
-                      if (onUpdateParticipantStatus) {
+                      if (!isExpired && onUpdateParticipantStatus) {
                         onUpdateParticipantStatus(plan.id, currentPersona.id, opt.id);
                         confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } });
                       }
                     }}
-                    className={`relative w-full px-5 py-3.5 sm:px-6 sm:py-4 rounded-full flex items-center justify-between transition-all select-none cursor-pointer active:scale-[0.99] ${
+                    className={`relative w-full px-5 py-3.5 sm:px-6 sm:py-4 rounded-full flex items-center justify-between transition-all select-none ${
+                      isExpired ? 'cursor-not-allowed opacity-80' : 'cursor-pointer active:scale-[0.99]'
+                    } ${
                       isMyChoice
                         ? 'bg-[#FFF6E9] border-2 border-[#E58A13] shadow-xs'
                         : 'bg-white border border-[#ECEFF3] hover:border-[#DFE1E6]'
@@ -1095,6 +1441,18 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
             <span>
               {recordedEntries.length}/{allMembers.length > 0 ? allMembers.length : 1} responded
             </span>
+
+            {canShowReopen && (
+              <button
+                type="button"
+                onClick={() => onReopenFunDecider && onReopenFunDecider(plan.id)}
+                className="flex items-center gap-1.5 text-sm font-bold text-[#1A1B25] hover:text-black transition cursor-pointer active:scale-95 select-none"
+                title="Re-open check-in for all participants"
+              >
+                <RotateCw className="w-4 h-4 stroke-[2.5]" />
+                <span>Re-open Check-in</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1210,11 +1568,8 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
       {/* Section Header */}
       <div className="flex flex-col items-center justify-center text-center mb-6">
         <div>
-          <h2 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight leading-tight text-center">
-            Voting &amp; Decision
-          </h2>
-          <p className="text-sm sm:text-[15px] text-[#666D80] mt-1 font-normal leading-normal text-center">
-            Slide and swipe across decisions to vote, spin wheels, and draw mystery cards
+          <p className="text-sm sm:text-base text-[#666D80] font-normal leading-normal text-center">
+            Swipe the card to move to the next decision
           </p>
         </div>
       </div>
@@ -1359,6 +1714,7 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
         const livePlan = plans.find((p) => p.id === activeBlindPickPlan.id) || activeBlindPickPlan;
         return (
           <BlindPickDecider
+            key={`${livePlan.id}-${currentPersona.id}`}
             isOpen={Boolean(activeBlindPickPlan)}
             onClose={() => setActiveBlindPickPlan(null)}
             plan={livePlan}

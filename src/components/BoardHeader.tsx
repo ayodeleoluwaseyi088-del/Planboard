@@ -4,8 +4,8 @@ import {
   Move, 
   X, 
   Check, 
-  RotateCcw,
-  Timer
+  Timer,
+  ArrowLeft
 } from 'lucide-react';
 import { PlanBoard, UserPersona, ImagePosition } from '../types';
 import { getImageStyle, DEFAULT_IMAGE_POSITION } from '../utils/imagePosition';
@@ -53,18 +53,15 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
       (m) => (m.id === currentPersona?.id || (Boolean(m.name) && Boolean(currentPersona?.name) && m.name.toLowerCase() === currentPersona?.name.toLowerCase())) && (m.role === 'owner' || m.role === 'admin')
     ));
 
-  // Check if any attached plan specifies a date/time (or fallback to board's explicit plan-synced values)
-  const scheduledPlan = (board.plans || []).find((p) => p.isPrimary && (p.date || p.time || p.dateTime))
-    || (board.plans || []).find((p) => p.date || p.time || p.dateTime);
+  // Only use explicit board-level event schedule, NOT individual decision deadlines
+  const rawDate = board.date;
+  const rawTime = board.time;
+  const activeDateTime = board.dateTime;
 
-  const rawDate = scheduledPlan?.date || board.date;
-  const rawTime = scheduledPlan?.time || board.time;
-  const activeDateTime = scheduledPlan?.dateTime || board.dateTime;
-
-  // Determine if specific time was added (no invented time if only date was selected)
-  const isTimeExplicitlySpecified = scheduledPlan?.hasSpecificTime !== undefined
-    ? scheduledPlan.hasSpecificTime
-    : (board.hasSpecificTime !== undefined ? board.hasSpecificTime : Boolean(rawTime));
+  // Determine if specific time was added on the board itself
+  const isTimeExplicitlySpecified = board.hasSpecificTime !== undefined 
+    ? board.hasSpecificTime 
+    : Boolean(rawTime);
 
   const hasActualDate = Boolean(rawDate || activeDateTime);
   const hasActualTime = Boolean(rawTime && isTimeExplicitlySpecified);
@@ -141,7 +138,7 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
   return (
     <div className="relative mb-6 rounded-3xl sm:rounded-[32px] overflow-hidden bg-[#1A1B25] shadow-xs">
       {/* Cover Banner */}
-      <div className="relative h-80 sm:h-96 md:h-[460px] w-full overflow-hidden">
+      <div className="relative h-[560px] sm:h-96 md:h-[460px] w-full overflow-hidden">
         <img 
           src={board.coverImage} 
           alt={board.title} 
@@ -251,65 +248,63 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
       {/* Reposition Cover Modal */}
       {isRepositioningCover && isCreatorOrAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-[#DFE1E6] space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-[#ECEFF3]">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
-                  <Move className="w-5 h-5" />
-                </div>
+          <div className="bg-white rounded-3xl sm:rounded-[32px] max-w-xl w-full overflow-hidden shadow-2xl border border-[#DFE1E6] animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="px-6 py-4 flex items-center justify-between border-b border-[#ECEFF3]">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsRepositioningCover(false)}
+                  className="w-10 h-10 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] flex items-center justify-center text-[#353849] hover:text-[#1A1B25] transition shrink-0 cursor-pointer"
+                  aria-label="Back"
+                >
+                  <ArrowLeft className="w-5 h-5 text-[#353849]" />
+                </button>
                 <div>
-                  <h3 className="text-base font-black text-[#1A1B25]">Reposition Cover Image</h3>
-                  <p className="text-xs text-[#666D80]">Drag image to adjust framing or use zoom controls</p>
+                  <h3 className="text-base sm:text-lg font-extrabold text-[#1A1B25] leading-tight">Reposition Cover Image</h3>
+                  <p className="text-xs text-[#808897] mt-0.5">Drag image to adjust framing</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsRepositioningCover(false)}
-                className="p-1.5 rounded-xl text-[#808897] hover:bg-[#F6F8FA] transition cursor-pointer"
+                className="w-10 h-10 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] flex items-center justify-center text-[#808897] hover:text-[#1A1B25] transition shrink-0 cursor-pointer"
+                aria-label="Close"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <ImageFramePositioner
-              imageUrl={board.coverImage}
-              position={tempPosition}
-              onChange={setTempPosition}
-              aspectRatio="banner"
-              containerClassName="h-56 sm:h-64 rounded-2xl overflow-hidden"
-            />
+            {/* Canvas Body */}
+            <div className="p-5 sm:p-6 bg-white">
+              <ImageFramePositioner
+                imageUrl={board.coverImage}
+                position={tempPosition}
+                onChange={setTempPosition}
+                frameHeight="aspect-[4/3] sm:aspect-[16/11] w-full max-h-[380px]"
+                showControls={false}
+                hideCoordinates={true}
+                hideBottomHint={true}
+                promptText="Drag to reposition"
+                className="rounded-2xl overflow-hidden shadow-xs"
+              />
+            </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-[#ECEFF3]">
+            {/* Footer */}
+            <div className="p-5 sm:p-6 bg-[#F8F9FB] border-t border-[#ECEFF3]">
               <button
                 type="button"
-                onClick={() => setTempPosition({ ...DEFAULT_IMAGE_POSITION })}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-[#666D80] hover:bg-[#F6F8FA] transition cursor-pointer"
+                onClick={() => {
+                  if (onUpdateCoverPosition) {
+                    onUpdateCoverPosition(tempPosition);
+                  }
+                  setIsRepositioningCover(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 py-3.5 sm:py-4 px-6 rounded-full bg-[#1A1B25] hover:bg-black text-white text-sm sm:text-base font-bold shadow-xs transition active:scale-[0.99] cursor-pointer"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset to Center</span>
+                <Check className="w-4 h-4 stroke-[2.5]" />
+                <span>Save position</span>
               </button>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsRepositioningCover(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#666D80] hover:bg-[#F6F8FA] border border-[#DFE1E6] transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onUpdateCoverPosition) {
-                      onUpdateCoverPosition(tempPosition);
-                    }
-                    setIsRepositioningCover(false);
-                  }}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black text-white bg-[#1A1B25] hover:bg-black transition shadow-xs cursor-pointer active:scale-95"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Save Position</span>
-                </button>
-              </div>
             </div>
           </div>
         </div>

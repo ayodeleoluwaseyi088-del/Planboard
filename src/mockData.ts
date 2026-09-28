@@ -161,7 +161,7 @@ export const SUGGESTED_PLANS: SuggestedPlanTemplate[] = [
     description: 'Sound equipment, DJ coordination, and shared party playlist.',
     defaultDeciderType: 'task_duty',
     defaultTaskDuty: {
-      description: 'Bring high-power party speaker, AUX cables, and coordinate DJ playlist.',
+      description: 'Coordinate musics or DJ to play',
     },
     defaultVoting: {
       question: 'What genre vibe should dominate the party?',
@@ -278,6 +278,11 @@ export const SUGGESTED_PLANS: SuggestedPlanTemplate[] = [
     defaultDeciderType: 'task_duty',
     defaultTaskDuty: {
       description: 'Bring Cards Against Humanity, beach volleyball, and curate 3 trivia rounds.',
+    },
+    defaultVoting: {
+      question: 'What kind of games should we play?',
+      options: ['PS4', 'PS5', ''],
+      deadlineText: 'Voting closes before event',
     },
   },
   {

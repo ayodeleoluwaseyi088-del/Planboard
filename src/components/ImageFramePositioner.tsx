@@ -32,6 +32,8 @@ export interface ImageFramePositionerProps {
   showControls?: boolean;
   showRuleOfThirds?: boolean;
   promptText?: string;
+  hideCoordinates?: boolean;
+  hideBottomHint?: boolean;
 }
 
 export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
@@ -44,6 +46,8 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
   className = '',
   showControls = true,
   promptText = 'Drag image to reposition within frame',
+  hideCoordinates = false,
+  hideBottomHint = false,
 }) => {
   const [internalPos, setInternalPos] = useState<ImagePosition>(() =>
     normalizeImagePosition(position)
@@ -252,32 +256,34 @@ export const ImageFramePositioner: React.FC<ImageFramePositionerProps> = ({
 
           {/* Floating Instructions & Status Pill */}
           {!readOnly && (
-            <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-20">
+            <div className="absolute top-3.5 left-3.5 right-3.5 flex items-center justify-between pointer-events-none z-20">
               {/* Drag Prompt Badge */}
               <div 
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold shadow-sm backdrop-blur-md transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shadow-xs transition-all ${
                   isDragging
-                    ? 'bg-[#1A1B25]/90 text-white scale-95'
-                    : 'bg-white/90 text-[#1A1B25]'
+                    ? 'bg-[#1A1B25] text-white scale-95'
+                    : 'bg-white text-[#1A1B25]'
                 }`}
               >
-                <Move className={`w-3 h-3 ${isDragging ? 'text-amber-400 animate-spin' : 'text-[#666D80]'}`} />
+                <Move className={`w-3.5 h-3.5 ${isDragging ? 'text-amber-400' : 'text-[#1A1B25]'}`} />
                 <span>{isDragging ? 'Repositioning...' : promptText}</span>
               </div>
 
               {/* Live Coordinates Pill */}
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white text-[10px] font-bold">
-                <span>{positionLabel}</span>
-                <span className="text-white/60">({internalPos.x}%, {internalPos.y}%)</span>
-                {internalPos.scale && internalPos.scale > 1 && (
-                  <span className="text-amber-300 ml-0.5">• {internalPos.scale}x</span>
-                )}
-              </div>
+              {!hideCoordinates && (
+                <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white text-[10px] font-bold">
+                  <span>{positionLabel}</span>
+                  <span className="text-white/60">({internalPos.x}%, {internalPos.y}%)</span>
+                  {internalPos.scale && internalPos.scale > 1 && (
+                    <span className="text-amber-300 ml-0.5">• {internalPos.scale}x</span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
           {/* Interactive Drag Shield Indicator (Subtle bottom-right hint) */}
-          {!readOnly && !isDragging && (
+          {!readOnly && !isDragging && !hideBottomHint && (
             <div className="absolute bottom-2.5 right-2.5 z-20 flex items-center gap-1.5 pointer-events-none">
               <span className="px-2 py-0.5 rounded-md bg-black/50 backdrop-blur-xs text-[10px] font-semibold text-white/90 shadow-xs">
                 Drag to adjust

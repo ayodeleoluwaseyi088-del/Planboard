@@ -224,12 +224,12 @@ export const SuggestionsSection: React.FC<SuggestionsSectionProps> = ({
   return (
     <section id="suggestions-section" className="mb-8 scroll-mt-20">
       {/* Top Header */}
-      <div className="flex items-center justify-between gap-4 mb-6">
+      <div className="w-full flex items-start justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight">
+          <h2 className="text-2xl sm:text-[28px] font-bold text-[#1A1B25] tracking-tight leading-tight">
             Visual Suggestions
           </h2>
-          <p className="text-xs sm:text-sm text-[#808897] mt-1 font-normal">
+          <p className="text-sm sm:text-base text-[#808897] mt-1.5 font-normal max-w-[250px] leading-snug">
             Browse and vote on visual inspiration by category. Ranked by popularity.
           </p>
         </div>
@@ -238,7 +238,7 @@ export const SuggestionsSection: React.FC<SuggestionsSectionProps> = ({
           type="button"
           id="main-add-visual-suggestion-btn"
           onClick={() => onOpenAddSuggestion(selectedPlanFilter || (plans.length > 0 ? plans[0].id : undefined))}
-          className="w-11 h-11 shrink-0 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white flex items-center justify-center transition-all cursor-pointer shadow-xs hover:scale-105 active:scale-95"
+          className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95"
           title="Add visual suggestion"
           aria-label="Add visual suggestion"
         >

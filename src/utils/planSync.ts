@@ -77,6 +77,35 @@ export function getLeadingOption(options?: { id: string; label: string; voteCoun
   return sorted[0];
 }
 
+export interface VotingWinnerResult<T = { id: string; label: string; voteCount: number }> {
+  winner: T | null;
+  isTie: boolean;
+  tiedLeaders: T[];
+  topVoteCount: number;
+}
+
+/**
+ * Calculates whether there is a single winner or a tie based strictly on highest vote count.
+ * Core rule: one voting round -> one winner.
+ */
+export function getSingleWinningOption<T extends { id: string; label: string; voteCount: number }>(
+  options?: T[]
+): VotingWinnerResult<T> {
+  if (!options || options.length === 0) {
+    return { winner: null, isTie: false, tiedLeaders: [], topVoteCount: 0 };
+  }
+  const sorted = [...options].sort((a, b) => b.voteCount - a.voteCount);
+  const topVoteCount = sorted[0]?.voteCount ?? 0;
+  if (topVoteCount <= 0) {
+    return { winner: null, isTie: false, tiedLeaders: [], topVoteCount: 0 };
+  }
+  const tiedLeaders = sorted.filter((opt) => opt.voteCount === topVoteCount);
+  if (tiedLeaders.length > 1) {
+    return { winner: null, isTie: true, tiedLeaders, topVoteCount };
+  }
+  return { winner: tiedLeaders[0], isTie: false, tiedLeaders, topVoteCount };
+}
+
 export interface PlanCurrentTruth {
   value: string;
   isDecided: boolean;

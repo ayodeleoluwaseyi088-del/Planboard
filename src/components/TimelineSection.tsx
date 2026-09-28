@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MapPin, Plus, Clock } from 'lucide-react';
+import { MapPin, Plus, CheckSquare } from 'lucide-react';
 import { TimelineEntry, UserPersona } from '../types';
 
 interface TimelineSectionProps {
@@ -39,12 +39,12 @@ export const TimelineSection: React.FC<TimelineSectionProps> = ({
   return (
     <section id="timeline-section" className="scroll-mt-20">
       {/* Section Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl sm:text-[28px] font-black text-[#1A1B25] tracking-tight leading-tight">
+          <h2 className="text-xl sm:text-2xl font-bold text-[#1A1B25]">
             Timeline & Itinerary
           </h2>
-          <p className="text-xs sm:text-sm text-[#808897] mt-0.5">
+          <p className="text-sm text-[#808897] mt-1 font-normal">
             The chronological flow for the event
           </p>
         </div>
@@ -52,15 +52,15 @@ export const TimelineSection: React.FC<TimelineSectionProps> = ({
         <button
           type="button"
           onClick={() => setShowAddForm(!showAddForm)}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white border border-[#DFE1E6] hover:bg-[#F6F8FA] text-xs font-bold text-[#1A1B25] transition cursor-pointer shadow-xs self-start sm:self-auto"
+          className="w-11 h-11 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white flex items-center justify-center transition shadow-xs cursor-pointer shrink-0"
+          title={showAddForm ? 'Cancel' : 'Add Itinerary Stop'}
         >
-          <Plus className="w-3.5 h-3.5 text-[#666D80]" />
-          <span>{showAddForm ? 'Cancel' : 'Add Itinerary'}</span>
+          <Plus className="w-5 h-5 stroke-[2.2]" />
         </button>
       </div>
 
       {showAddForm && (
-        <form onSubmit={handleCreate} className="mb-4 p-5 bg-white rounded-3xl border border-[#F6F8FA] shadow-[3px_4px_20px_0px_#ECEFF3] space-y-3">
+        <form onSubmit={handleCreate} className="mt-4 p-5 bg-white rounded-3xl border border-[#ECEFF3] shadow-xs space-y-3">
           <div className="font-bold text-sm text-[#1A1B25]">Add Itinerary Stop</div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <input
@@ -107,24 +107,11 @@ export const TimelineSection: React.FC<TimelineSectionProps> = ({
 
       {/* Main Timeline Content */}
       {timeline.length === 0 ? (
-        <div className="w-full py-16 sm:py-24 flex flex-col items-center justify-center text-center select-none">
-          <Clock className="w-9 h-9 text-[#272835] stroke-[2.2] mb-4" />
-          <h3 className="text-xl sm:text-2xl font-bold text-[#272835] tracking-tight leading-snug mb-2">
+        <div className="bg-[#F6F8FA] rounded-3xl py-16 sm:py-20 px-6 flex flex-col items-center justify-center text-center mt-5 select-none">
+          <CheckSquare className="w-8 h-8 text-[#A4ABB8] stroke-[1.5] mb-3" />
+          <p className="text-sm font-semibold text-[#808897]">
             No itinerary items yet
-          </h3>
-          <p className="text-sm sm:text-base text-[#808897] font-normal tracking-normal max-w-lg leading-relaxed">
-            Add scheduled stops and timings to map out the chronological flow for the event
           </p>
-          {!showAddForm && (
-            <button
-              type="button"
-              onClick={() => setShowAddForm(true)}
-              className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white text-sm font-bold transition cursor-pointer shadow-xs active:scale-95"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>Add Itinerary Stop</span>
-            </button>
-          )}
         </div>
       ) : (
         <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#F6F8FA] shadow-[3px_4px_20px_0px_#ECEFF3] divide-y divide-[#ECEFF3]">

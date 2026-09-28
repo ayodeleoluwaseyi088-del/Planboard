@@ -33,6 +33,7 @@ import {
 import {
   isPlanMatchingItem,
   getLeadingOption,
+  getSingleWinningOption,
   broadcastBoardUpdate,
   setupBoardSyncListener,
 } from './utils/planSync';
@@ -405,11 +406,15 @@ export default function App() {
           return opt;
         });
 
-        // Compute gamified leader note and auto-finalization
+        // Compute winner strictly: one voting round -> one winner; no automatic winner on ties
+        const { winner, isTie, tiedLeaders } = getSingleWinningOption(updatedOptions);
         const sorted = [...updatedOptions].sort((a, b) => b.voteCount - a.voteCount);
         const leader = sorted[0];
+
         let note = dec.gamifiedNote;
-        if (leader && leader.voteCount > 0) {
+        if (isTie && tiedLeaders.length > 1) {
+          note = `It's currently a tie between ${tiedLeaders.map((o) => o.label).join(' & ')} (${tiedLeaders[0].voteCount} votes each)! ⚖️`;
+        } else if (leader && leader.voteCount > 0) {
           note = `${leader.label} is currently leading with ${leader.voteCount} ${leader.voteCount === 1 ? 'vote' : 'votes'}! 🗳️`;
         }
 
@@ -420,10 +425,17 @@ export default function App() {
         let isReopenedVal = dec.isReopened;
         let decStatus = dec.status;
         let finalDecText = dec.finalDecision;
-        if (isVotingFinished && leader && leader.voteCount > 0) {
-          decStatus = 'completed' as const;
-          finalDecText = `${leader.label} — ${leader.voteCount} votes`;
-          isReopenedVal = false;
+
+        if (isVotingFinished) {
+          if (winner && winner.voteCount > 0) {
+            decStatus = 'completed' as const;
+            finalDecText = `${winner.label} — ${winner.voteCount} votes`;
+            isReopenedVal = false;
+          } else {
+            // Tie or no votes: leave open so Admin/Owner can resolve or reopen
+            decStatus = 'open' as const;
+            finalDecText = undefined;
+          }
         }
 
         return {
@@ -442,18 +454,18 @@ export default function App() {
 
       const updatedPlans = prev.plans.map((plan) => {
         if (isPlanMatchingItem(plan, decision)) {
-          const leader = targetDecision ? getLeadingOption(targetDecision.options) : null;
+          const { winner } = targetDecision ? getSingleWinningOption(targetDecision.options) : { winner: null };
           const totalVotes = (targetDecision?.options || []).reduce((sum, opt) => sum + opt.voteCount, 0);
           const totalNeeded = prev.members?.length > 0 ? prev.members.length : 1;
           const isVotingFinished = totalVotes >= totalNeeded;
 
-          if (isVotingFinished && leader && leader.voteCount > 0) {
+          if (isVotingFinished && winner && winner.voteCount > 0) {
             // Check if leader option corresponds to a suggestion for this plan
             const winningSug = prev.suggestions.find(
               (s) =>
-                s.id === leader.id.replace(/^opt-/, '') ||
-                (leader as any).suggestionId === s.id ||
-                ((s.planId === plan.id || isPlanMatchingItem(plan, s)) && s.title.trim().toLowerCase() === leader.label.trim().toLowerCase())
+                s.id === winner.id.replace(/^opt-/, '') ||
+                (winner as any).suggestionId === s.id ||
+                ((s.planId === plan.id || isPlanMatchingItem(plan, s)) && s.title.trim().toLowerCase() === winner.label.trim().toLowerCase())
             );
 
             if (winningSug) {
@@ -503,7 +515,7 @@ export default function App() {
                 ideaDesc: winningSug.description || plan.ideaDesc,
                 description: winningSug.description || plan.description,
                 infoValue: `${winningSug.title} - ${winningSug.description}`,
-                finalDecision: `${winningSug.title} — ${leader.voteCount} ${leader.voteCount === 1 ? 'vote' : 'votes'} (Voted Choice)`,
+                finalDecision: `${winningSug.title} — ${winner.voteCount} ${winner.voteCount === 1 ? 'vote' : 'votes'} (Voted Choice)`,
                 status: 'confirmed' as const,
                 isSelectedWinner: true,
                 appliedSuggestionId: winningSug.id,
@@ -517,8 +529,8 @@ export default function App() {
             return {
               ...plan,
               options: targetDecision?.options || plan.options,
-              currentSelection: leader.label,
-              finalDecision: `${leader.label} — ${leader.voteCount} votes`,
+              currentSelection: winner.label,
+              finalDecision: `${winner.label} — ${winner.voteCount} votes`,
               status: 'confirmed' as const,
               decidedSource: 'voting' as const,
               decidedAt: new Date().toISOString(),
@@ -527,7 +539,7 @@ export default function App() {
               isReopened: false,
               location:
                 plan.category.toLowerCase().includes('location') || plan.title.toLowerCase().includes('location')
-                  ? leader.label
+                  ? winner.label
                   : plan.location,
             };
           }
@@ -1436,9 +1448,15 @@ export default function App() {
     }));
   };
 
-  // 12. Attached Plans Management (Owner Privilege)
+  // 12. Attached Plans Management (Owner/Admin Privilege)
   const handleAddPlan = (newPlan: AttachedPlan) => {
-    if (currentPersona.role !== 'owner') return;
+    const isOwnerOrAdmin =
+      currentPersona.role === 'owner' ||
+      currentPersona.role === 'admin' ||
+      effectivePersona.role === 'owner' ||
+      effectivePersona.role === 'admin' ||
+      (Boolean(board.ownerId) && currentPersona.id === board.ownerId);
+    if (!isOwnerOrAdmin) return;
     setBoard((prev) => {
       const existingPlans = prev.plans || [];
       // Prevent duplicate plans by ID or exact title
@@ -1473,7 +1491,10 @@ export default function App() {
             question: newPlan.question || `Vote on ${newPlan.title}`,
             priority: newPlan.priority || 'required',
             status: 'open',
-            deadlineText: newPlan.deadlineText || 'Voting closes in 2 days',
+            deadlineText: newPlan.deadlineText || (newPlan.date && newPlan.time
+              ? `Vote before ${newPlan.time}, ${newPlan.date}`
+              : 'Voting closes in 2 days'),
+            deadlineIso: newPlan.deadlineIso || newPlan.dateTime,
             options: newPlan.options && newPlan.options.length > 0 ? newPlan.options : [
               { id: `opt-${newPlan.id}-0`, label: 'Option 1', emoji: '🔘', voteCount: 0, voterIds: [] },
               { id: `opt-${newPlan.id}-1`, label: 'Option 2', emoji: '🔘', voteCount: 0, voterIds: [] },
@@ -1481,6 +1502,7 @@ export default function App() {
             totalVotesNeeded: prev.members?.length > 0 ? prev.members.length : 1,
             createdBy: currentPersona.name,
             deciderItemId: newPlan.id,
+            planId: newPlan.id,
           });
         }
       } else if (newPlan.deciderType === 'fixed_info') {
@@ -1511,8 +1533,10 @@ export default function App() {
             status: newPlan.assigneeId ? 'in_progress' : 'open',
             assigneeId: newPlan.assigneeId,
             assigneeName: newPlan.assigneeName,
-            deadlineText: newPlan.deadlineText || 'Open for volunteers',
+            deadlineText: newPlan.date && newPlan.time ? `Complete before ${newPlan.time}, ${newPlan.date}` : (newPlan.deadlineText || 'Open for volunteers'),
+            deadlineIso: newPlan.dateTime,
             deciderItemId: newPlan.id,
+            planId: newPlan.id,
           });
         }
       } else if (newPlan.deciderType === 'photo_idea') {
@@ -1538,17 +1562,9 @@ export default function App() {
       }
 
       const allPlans = [...updatedPlans, newPlan];
-      const planWithSchedule = allPlans.find((p) => p.isPrimary && (p.date || p.time || p.dateTime))
-        || allPlans.find((p) => p.date || p.time || p.dateTime);
-      const hasStructuredTime = Boolean(planWithSchedule?.time && planWithSchedule.hasSpecificTime !== false);
 
       return {
         ...prev,
-        date: planWithSchedule?.date,
-        time: planWithSchedule?.time,
-        dateTime: planWithSchedule?.dateTime,
-        hasSpecificTime: planWithSchedule ? hasStructuredTime : undefined,
-        daysToGo: undefined,
         plans: allPlans,
         decisions: updatedDecisions,
         information: updatedInfo,
@@ -1560,7 +1576,13 @@ export default function App() {
   };
 
   const handleEditPlan = (updatedPlan: AttachedPlan) => {
-    if (currentPersona.role !== 'owner') return;
+    const isOwnerOrAdmin =
+      currentPersona.role === 'owner' ||
+      currentPersona.role === 'admin' ||
+      effectivePersona.role === 'owner' ||
+      effectivePersona.role === 'admin' ||
+      (Boolean(board.ownerId) && currentPersona.id === board.ownerId);
+    if (!isOwnerOrAdmin) return;
     setBoard((prev) => {
       const existingPlans = prev.plans || [];
       const updatedPlans = existingPlans.map((p) => {
@@ -1582,7 +1604,11 @@ export default function App() {
             question: updatedPlan.question || d.question,
             emoji: updatedPlan.emoji,
             priority: updatedPlan.priority || d.priority,
-            deadlineText: updatedPlan.deadlineText || d.deadlineText,
+            deadlineText: updatedPlan.deadlineText || (updatedPlan.date && updatedPlan.time
+              ? `Vote before ${updatedPlan.time}, ${updatedPlan.date}`
+              : d.deadlineText),
+            deadlineIso: updatedPlan.deadlineIso || updatedPlan.dateTime,
+            planId: updatedPlan.id,
             options: updatedPlan.options && updatedPlan.options.length > 0 ? updatedPlan.options : d.options,
           };
         }
@@ -1612,7 +1638,11 @@ export default function App() {
             emoji: updatedPlan.emoji,
             assigneeId: updatedPlan.assigneeId || t.assigneeId,
             assigneeName: updatedPlan.assigneeName || t.assigneeName,
-            deadlineText: updatedPlan.deadlineText || t.deadlineText,
+            deadlineText: updatedPlan.date && updatedPlan.time
+              ? `Complete before ${updatedPlan.time}, ${updatedPlan.date}`
+              : (updatedPlan.deadlineText || t.deadlineText),
+            deadlineIso: updatedPlan.dateTime,
+            planId: updatedPlan.id,
           };
         }
         return t;
@@ -1631,17 +1661,8 @@ export default function App() {
         return s;
       });
 
-      const planWithSchedule = updatedPlans.find((p) => p.isPrimary && (p.date || p.time || p.dateTime))
-        || updatedPlans.find((p) => p.date || p.time || p.dateTime);
-      const hasStructuredTime = Boolean(planWithSchedule?.time && planWithSchedule.hasSpecificTime !== false);
-
       return {
         ...prev,
-        date: planWithSchedule?.date,
-        time: planWithSchedule?.time,
-        dateTime: planWithSchedule?.dateTime,
-        hasSpecificTime: planWithSchedule ? hasStructuredTime : undefined,
-        daysToGo: undefined,
         plans: updatedPlans,
         decisions: updatedDecisions,
         information: updatedInfo,
@@ -1653,7 +1674,13 @@ export default function App() {
   };
 
   const handleRemovePlan = (planId: string) => {
-    if (currentPersona.role !== 'owner') return;
+    const isOwnerOrAdmin =
+      currentPersona.role === 'owner' ||
+      currentPersona.role === 'admin' ||
+      effectivePersona.role === 'owner' ||
+      effectivePersona.role === 'admin' ||
+      (Boolean(board.ownerId) && currentPersona.id === board.ownerId);
+    if (!isOwnerOrAdmin) return;
     setBoard((prev) => {
       const existingPlans = prev.plans || [];
       const target = existingPlans.find((p) => p.id === planId);
@@ -1884,6 +1911,7 @@ export default function App() {
           reopenedAt: new Date().toISOString(),
           decisionRound: nextRound,
           participantSelections: {},
+          participantStatuses: {},
           wheelWinningOption: undefined,
           finalDecision: undefined,
           decidedSource: undefined,

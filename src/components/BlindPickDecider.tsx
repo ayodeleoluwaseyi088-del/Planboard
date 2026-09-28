@@ -120,12 +120,20 @@ export const BlindPickDecider: React.FC<BlindPickDeciderProps> = ({
   const effectiveQuestion = question || plan?.spinnerQuestion || `What should we choose for ${effectiveTitle}?`;
   const rawOptions = options || plan?.spinnerOptions || [];
 
-  const cleanOptions = Array.isArray(rawOptions) && rawOptions.length >= 2
-    ? rawOptions.filter((o) => typeof o === 'string' && o.trim().length > 0)
-    : ['KFC', 'Chicken Republic', 'Kilimanjaro', 'The Place', "Domino's"];
+  const cleanOptions = React.useMemo(() => {
+    if (Array.isArray(rawOptions) && rawOptions.length > 0) {
+      const filtered = rawOptions.filter((o) => typeof o === 'string' && o.trim().length > 0);
+      if (filtered.length > 0) return filtered;
+    }
+    return ['Option 1', 'Option 2', 'Option 3'];
+  }, [rawOptions]);
 
-  // Total card slots in 3 columns: ensure at least 6 cards (3x2 grid) exactly as in design reference
-  const totalSlots = Math.max(6, cleanOptions.length);
+  // Card count strictly matches the number of available voting options!
+  // * 3 options -> 3 cards
+  // * 4 options -> 4 cards
+  // * 6 options -> 6 cards
+  // Do not default to 6 cards when fewer options exist.
+  const totalSlots = cleanOptions.length;
 
   // Check if current participant already made a selection
   const existingParticipantSelection = currentUserId && plan?.participantSelections
@@ -143,6 +151,10 @@ export const BlindPickDecider: React.FC<BlindPickDeciderProps> = ({
   const [shuffledIndices, setShuffledIndices] = useState<number[]>(() =>
     generateShuffledIndices(totalSlots)
   );
+
+  useEffect(() => {
+    setShuffledIndices(generateShuffledIndices(totalSlots));
+  }, [totalSlots]);
 
   const [revealedSlotIdx, setRevealedSlotIdx] = useState<number | null>(null);
   const [isShufflingAnimation, setIsShufflingAnimation] = useState<boolean>(false);
@@ -352,7 +364,13 @@ export const BlindPickDecider: React.FC<BlindPickDeciderProps> = ({
         {/* Mystery Cards Section */}
         <div className="w-full my-4">
           {!hasSelected ? (
-            <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
+            <div className={`grid gap-2.5 sm:gap-3 ${
+              totalSlots <= 2
+                ? 'grid-cols-2'
+                : totalSlots === 4
+                ? 'grid-cols-2 sm:grid-cols-4'
+                : 'grid-cols-3'
+            }`}>
               {Array.from({ length: totalSlots }).map((_, slotIdx) => (
                 <button
                   key={slotIdx}

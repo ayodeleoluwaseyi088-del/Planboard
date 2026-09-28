@@ -591,3 +591,92 @@ export function useLiveCountdown(isoDateTime?: string, hasSpecificTime = true): 
 
   return getCountdownInfo(isoDateTime, hasSpecificTime, now);
 }
+
+/**
+ * Formats a decision deadline string matching the requirement example:
+ * "Vote before 10:00 PM, Sunday 27 September"
+ */
+export function formatDecisionDeadline(
+  date: Date,
+  deciderType?: string
+): string {
+  const weekday = DAY_NAMES[date.getDay()];
+  const day = date.getDate();
+  const month = MONTH_NAMES[date.getMonth()];
+  const time = formatHumanTime(date);
+
+  let verb = 'Vote';
+  if (deciderType === 'wheel_spinner') verb = 'Spin';
+  else if (deciderType === 'blind_pick') verb = 'Pick';
+  else if (deciderType === 'participant_status') verb = 'Respond';
+  else if (deciderType === 'task_duty') verb = 'Complete';
+
+  return `${verb} before ${time}, ${weekday} ${day} ${month}`;
+}
+
+export interface DecisionCountdownResult {
+  isExpired: boolean;
+  label: string;
+  isImminent: boolean;
+  remainingSeconds: number;
+}
+
+/**
+ * Returns a live ticking countdown for a decision deadline
+ */
+export function getDecisionCountdown(
+  deadlineIsoOrDate: string | Date | undefined,
+  nowMs = Date.now()
+): DecisionCountdownResult | null {
+  if (!deadlineIsoOrDate) return null;
+  const deadlineDate = typeof deadlineIsoOrDate === 'string' ? new Date(deadlineIsoOrDate) : deadlineIsoOrDate;
+  if (isNaN(deadlineDate.getTime())) return null;
+
+  const diffMs = deadlineDate.getTime() - nowMs;
+  if (diffMs <= 0) {
+    return {
+      isExpired: true,
+      label: 'Closed',
+      isImminent: false,
+      remainingSeconds: 0,
+    };
+  }
+
+  const totalSecs = Math.floor(diffMs / 1000);
+  const days = Math.floor(totalSecs / 86400);
+  const hours = Math.floor((totalSecs % 86400) / 3600);
+  const minutes = Math.floor((totalSecs % 3600) / 60);
+  const seconds = totalSecs % 60;
+
+  let label = '';
+  if (days > 0) {
+    label = `${days}d ${hours}h left`;
+  } else if (hours > 0) {
+    label = `${hours}h ${minutes}m left`;
+  } else if (minutes > 0) {
+    label = `${minutes}m ${seconds}s left`;
+  } else {
+    label = `${seconds}s left`;
+  }
+
+  return {
+    isExpired: false,
+    label,
+    isImminent: diffMs < 60 * 60 * 1000,
+    remainingSeconds: totalSecs,
+  };
+}
+
+const ORDINAL_MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+export function formatOrdinalDate(year: number, month: number, day: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = day % 100;
+  const suffix = s[(v - 20) % 10] || s[v] || s[0];
+  return `${ORDINAL_MONTH_NAMES[month]} ${day}${suffix} ${year}`;
+}
+
+

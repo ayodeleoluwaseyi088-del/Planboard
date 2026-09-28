@@ -124,18 +124,13 @@ export const FirstTimeJoinModal: React.FC<FirstTimeJoinModalProps> = ({
     return openAttendancePlans.find((p) => p.id === selectedAttendancePlanId) || openAttendancePlans[0] || null;
   }, [openAttendancePlans, selectedAttendancePlanId]);
 
-  // Derive schedule and countdown from plans
-  const scheduledPlan = useMemo(() => {
-    return (board.plans || []).find((p) => p.isPrimary && (p.date || p.time || p.dateTime))
-      || (board.plans || []).find((p) => p.date || p.time || p.dateTime);
-  }, [board.plans]);
-
-  const activeDateTime = scheduledPlan?.dateTime || board.dateTime;
-  const activeDate = scheduledPlan?.date || board.date;
-  const activeTime = scheduledPlan?.time || board.time;
+  // Derive board-level schedule and countdown
+  const activeDateTime = board.dateTime;
+  const activeDate = board.date;
+  const activeTime = board.time;
   const hasSpecificTime = Boolean(
     activeTime && 
-    (scheduledPlan?.hasSpecificTime !== undefined ? scheduledPlan.hasSpecificTime : board.hasSpecificTime !== false)
+    (board.hasSpecificTime !== false)
   );
   const hasDateAndTime = Boolean(activeDate && activeTime && activeDateTime && hasSpecificTime);
   const countdown = useLiveCountdown(hasDateAndTime ? activeDateTime : undefined, true);
