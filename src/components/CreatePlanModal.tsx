@@ -75,6 +75,9 @@ export const CreatePlanModal: React.FC<CreatePlanModalProps> = ({
     BOARD_AVATARS[0]?.url || currentPersona.avatar
   );
 
+  // Section 4: Board Visibility (Public / Private) - unchecked by default
+  const [isPublic, setIsPublic] = useState(false);
+
   // Reset form when opened or populate with initialBoard
   useEffect(() => {
     if (isOpen) {
@@ -90,6 +93,7 @@ export const CreatePlanModal: React.FC<CreatePlanModalProps> = ({
         });
         setCoverImage(initialBoard.coverImage || SAMPLE_COVERS[0]);
         setCoverImagePosition(initialBoard.coverImagePosition || { ...DEFAULT_IMAGE_POSITION });
+        setIsPublic(Boolean(initialBoard.isPublic));
         const hasCustomName = Boolean(
           initialBoard.creatorCustomIdentity?.useCustomName || initialBoard.useCustomName
         );
@@ -119,6 +123,7 @@ export const CreatePlanModal: React.FC<CreatePlanModalProps> = ({
         });
         setCoverImage(SAMPLE_COVERS[0]);
         setCoverImagePosition({ ...DEFAULT_IMAGE_POSITION });
+        setIsPublic(false);
         setUseCustomName(false);
         setCustomDisplayName('');
         setSelectedAvatar(BOARD_AVATARS[0]?.url || currentPersona.avatar);
@@ -220,6 +225,7 @@ export const CreatePlanModal: React.FC<CreatePlanModalProps> = ({
         creatorCustomName: finalCreatorName,
         creatorCustomAvatar: selectedAvatar,
         useCustomName: Boolean(useCustomName && customDisplayName.trim()),
+        isPublic: Boolean(isPublic),
         creatorCustomIdentity: {
           useCustomName: Boolean(useCustomName && customDisplayName.trim()),
           displayName: finalCreatorName,
@@ -257,6 +263,7 @@ export const CreatePlanModal: React.FC<CreatePlanModalProps> = ({
       creatorCustomName: finalCreatorName,
       creatorCustomAvatar: selectedAvatar,
       useCustomName: Boolean(useCustomName && customDisplayName.trim()),
+      isPublic: Boolean(isPublic),
       creatorCustomIdentity: {
         useCustomName: Boolean(useCustomName && customDisplayName.trim()),
         displayName: finalCreatorName,
@@ -478,7 +485,7 @@ export const CreatePlanModal: React.FC<CreatePlanModalProps> = ({
             )}
           </div>
 
-          {/* ACCORDION 3: Customize your Profile */}
+          {/* ACCORDION 3: Customise Your Profile */}
           <div className="flex flex-col">
             <button
               type="button"
@@ -486,7 +493,7 @@ export const CreatePlanModal: React.FC<CreatePlanModalProps> = ({
               className="w-full py-4.5 sm:py-5 flex items-center justify-between text-left cursor-pointer group select-none"
             >
               <span className="text-sm sm:text-base font-bold text-[#1A1B25]">
-                Customize your Profile
+                Customise Your Profile
               </span>
               <ChevronDown
                 className={`w-4 h-4 sm:w-4.5 sm:h-4.5 text-[#1A1B25] transition-transform duration-200 ${
@@ -515,6 +522,22 @@ export const CreatePlanModal: React.FC<CreatePlanModalProps> = ({
             )}
           </div>
 
+        </div>
+
+        {/* Board Visibility Option: Checkbox below "Customise Your Profile" (unchecked by default) */}
+        <div className="mb-8 sm:mb-10">
+          <label className="flex items-center gap-3 cursor-pointer group select-none">
+            <input
+              type="checkbox"
+              id="make-board-public-checkbox"
+              checked={isPublic}
+              onChange={(e) => setIsPublic(e.target.checked)}
+              className="w-5 h-5 rounded-md border-[#DFE1E6] text-[#1A1B25] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#1A1B25]"
+            />
+            <span className="text-sm sm:text-base font-bold text-[#1A1B25] group-hover:text-black transition-colors">
+              Make this board public
+            </span>
+          </label>
         </div>
 
         {/* Publish Board Primary Button */}

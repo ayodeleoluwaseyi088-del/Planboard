@@ -291,6 +291,7 @@ export interface PlanBoard {
   emoji: string;
   coverImage: string;
   coverImagePosition?: ImagePosition;
+  isPublic?: boolean;
   date?: string;
   time?: string;
   dateTime?: string; // ISO 8601 machine-readable timestamp

@@ -349,16 +349,18 @@ export const BlindPickDecider: React.FC<BlindPickDeciderProps> = ({
             Tap any face-down mystery card to draw your choice!
           </p>
 
-          {/* Centered Re-shuffle Button */}
-          <button
-            type="button"
-            onClick={handleReshuffle}
-            disabled={isEffectivelyFinalized}
-            className="mx-auto mt-2 flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-[#353849] hover:text-[#1A1B25] hover:bg-[#F6F8FA] transition cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <RotateCw className={`w-3.5 h-3.5 ${isShufflingAnimation ? 'animate-spin' : ''}`} />
-            <span>Re-shuffle</span>
-          </button>
+          {/* Centered Re-shuffle Button — Only before a participant has made their selection */}
+          {!hasSelected && (
+            <button
+              type="button"
+              onClick={handleReshuffle}
+              disabled={isEffectivelyFinalized}
+              className="mx-auto mt-2 flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-[#353849] hover:text-[#1A1B25] hover:bg-[#F6F8FA] transition cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <RotateCw className={`w-3.5 h-3.5 ${isShufflingAnimation ? 'animate-spin' : ''}`} />
+              <span>Re-shuffle</span>
+            </button>
+          )}
         </div>
 
         {/* Mystery Cards Section */}

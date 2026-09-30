@@ -5,8 +5,6 @@ import {
   ShareFat, 
   User, 
   Plus, 
-  FolderSimple, 
-  DeviceMobile, 
   Check,
   MagnifyingGlass,
   Trash,
@@ -15,7 +13,7 @@ import {
   Stack,
   Users
 } from '@phosphor-icons/react';
-import { Pencil } from 'lucide-react';
+import { Pencil, LogOut, Menu, X as LucideX } from 'lucide-react';
 import { UserPersona, PlanBoard } from '../types';
 import { getAllStoredBoards } from '../utils/boardStorage';
 
@@ -31,11 +29,17 @@ interface HeaderProps {
   onOpenCreatePlan: () => void;
   onOpenShare: () => void;
   onOpenJoinFlow: () => void;
+  onOpenJoinBoard?: () => void;
   onDeleteBoard?: (boardId: string) => void;
   onOpenUserProfile?: (persona: UserPersona) => void;
   onEditBoard?: (board: PlanBoard) => void;
   onNavigateToOwnerView?: () => void;
   onNavigateToMemberView?: (memberPersona: UserPersona) => void;
+  onNavigateToLanding?: () => void;
+  isAuthenticated?: boolean;
+  onRequireAuth?: (action: () => void) => void;
+  onLogout?: () => void;
+  hasBoards?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -50,38 +54,64 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenCreatePlan,
   onOpenShare,
   onOpenJoinFlow,
+  onOpenJoinBoard,
   onDeleteBoard,
   onOpenUserProfile,
   onEditBoard,
   onNavigateToOwnerView,
   onNavigateToMemberView,
+  onNavigateToLanding,
+  isAuthenticated = true,
+  onRequireAuth,
+  onLogout,
+  hasBoards = true,
 }) => {
   const [isBoardModalOpen, setIsBoardModalOpen] = useState(false);
+
+  // Only users who are logged in with an actual account (not unauthenticated/guest visitors) are considered authenticated
+  const isUserAuthenticated = Boolean(isAuthenticated && !currentPersona?.isGuest);
+
+  // Safe handler that requires authentication to create a board
+  const handleProtectedCreatePlan = () => {
+    if (!isAuthenticated && onRequireAuth) {
+      onRequireAuth(() => {
+        onOpenCreatePlan();
+      });
+    } else {
+      onOpenCreatePlan();
+    }
+  };
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [boardFilter, setBoardFilter] = useState<'all' | 'created' | 'joined'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   const boardSwitcherRef = useRef<HTMLDivElement>(null);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
 
   // Close popup modal on Escape key
   useEffect(() => {
-    if (!isBoardModalOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsBoardModalOpen(false);
+        setIsProfileMenuOpen(false);
+        setIsMobileMenuOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isBoardModalOpen]);
+  }, []);
 
-  // Click outside listener for profile dropdown
+  // Click outside listener for profile dropdown and mobile action menu
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as Node;
       if (profileDropdownRef.current && !profileDropdownRef.current.contains(target)) {
         setIsProfileMenuOpen(false);
+      }
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(target)) {
+        setIsMobileMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleOutsideClick);
@@ -219,8 +249,19 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-white px-4 sm:px-8 py-3.5 sm:py-4 transition-colors">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-        {/* LEFT: Board Switcher Pill */}
-        <div className="relative" ref={boardSwitcherRef}>
+        {/* LEFT: + New Plan Button (if no boards, matching image reference) or Board Switcher Pill */}
+        {!hasBoards ? (
+          <button
+            type="button"
+            onClick={handleProtectedCreatePlan}
+            className="flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] text-[#1A1B25] text-sm sm:text-base font-extrabold transition-colors cursor-pointer select-none active:scale-95 font-['Nunito']"
+            title="Create a new plan"
+          >
+            <Plus size={18} weight="bold" className="text-[#1A1B25]" />
+            <span>New Plan</span>
+          </button>
+        ) : (
+          <div className="relative" ref={boardSwitcherRef}>
           <button
             type="button"
             onClick={() => {
@@ -261,23 +302,45 @@ export const Header: React.FC<HeaderProps> = ({
                 className="bg-white w-full max-w-[820px] sm:w-[820px] h-[640px] max-h-[calc(100vh-2rem)] rounded-[32px] sm:rounded-[36px] p-6 sm:p-8 md:p-9 shadow-2xl relative animate-in zoom-in-95 duration-150 flex flex-col overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* Top Header: Title + New Board button */}
+                {/* Top Header strictly matching reference image: "My Board" on left, link icon & plus icon buttons on right */}
                 <div className="flex items-center justify-between gap-4 mb-6 sm:mb-7">
                   <h2 className="text-2xl sm:text-[28px] font-extrabold text-[#1A1B25] tracking-tight font-['Nunito']">
                     My Board
                   </h2>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsBoardModalOpen(false);
-                      onOpenCreatePlan();
-                    }}
-                    className="flex items-center gap-1.5 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white text-sm sm:text-[15px] font-bold transition shadow-xs cursor-pointer active:scale-95 shrink-0"
-                  >
-                    <Plus size={16} weight="bold" />
-                    <span>New Board</span>
-                  </button>
+                  <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+                    {/* Functional link icon button that opens Join Plan Board popup */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsBoardModalOpen(false);
+                        if (onOpenJoinBoard) {
+                          onOpenJoinBoard();
+                        } else {
+                          onOpenJoinFlow();
+                        }
+                      }}
+                      className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#F0F3F6] hover:bg-[#E2E6EA] text-[#1A1B25] flex items-center justify-center transition cursor-pointer active:scale-95 shadow-2xs"
+                      title="Join Plan Board"
+                      aria-label="Join Plan Board"
+                    >
+                      <LinkSimple size={20} weight="bold" className="text-[#1A1B25]" />
+                    </button>
+
+                    {/* Functional plus icon button that opens Create Board flow */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsBoardModalOpen(false);
+                        handleProtectedCreatePlan();
+                      }}
+                      className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#1A1B25] hover:bg-[#272835] text-white flex items-center justify-center transition cursor-pointer active:scale-95 shadow-xs"
+                      title="Create a new board"
+                      aria-label="Create a new board"
+                    >
+                      <Plus size={20} weight="bold" className="text-white" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Filter Tabs Pills */}
@@ -465,52 +528,322 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
         </div>
+      )}
 
-        {/* RIGHT: Share Button & Profile Dropdown matching reference */}
+        {/* RIGHT: Share Button & Profile Dropdown on Desktop, Hamburger Menu on Mobile */}
         <div className="flex items-center gap-2.5 sm:gap-3">
-          {/* Share Circular Button */}
-          <button
-            type="button"
-            onClick={onOpenShare}
-            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] flex items-center justify-center text-[#1A1B25] transition-colors cursor-pointer active:scale-95 select-none"
-            title="Share board"
-            aria-label="Share board"
-          >
-            <ShareFat size={20} weight="regular" className="text-[#1A1B25]" />
-          </button>
+          
+          {/* ========================================================
+              DESKTOP / TABLET: Keep existing layout unchanged (sm:flex)
+          ======================================================== */}
+          <div className="hidden sm:flex items-center gap-2.5 sm:gap-3">
+            {/* Share Circular Button - only if boards exist */}
+            {hasBoards && (
+              <button
+                type="button"
+                onClick={onOpenShare}
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] flex items-center justify-center text-[#1A1B25] transition-colors cursor-pointer active:scale-95 select-none"
+                title="Share board"
+                aria-label="Share board"
+              >
+                <ShareFat size={20} weight="regular" className="text-[#1A1B25]" />
+              </button>
+            )}
 
-          {/* User Profile / Persona Circular Button */}
-          <div className="relative" ref={profileDropdownRef}>
-            <button 
+            {/* User Profile / Persona Circular Button */}
+            <div className="relative" ref={profileDropdownRef}>
+              <button 
+                type="button"
+                onClick={() => {
+                  setIsProfileMenuOpen((prev) => !prev);
+                  setIsBoardModalOpen(false);
+                }}
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] flex items-center justify-center text-[#1A1B25] transition-colors cursor-pointer active:scale-95 select-none overflow-hidden ring-2 ring-transparent hover:ring-amber-300"
+                title="Profile & user switcher"
+                aria-label="User profile and account switcher"
+                aria-expanded={isProfileMenuOpen}
+                aria-haspopup="true"
+              >
+                {(boardPersona?.avatar || currentPersona.avatar) ? (
+                  <img 
+                    src={boardPersona?.avatar || currentPersona.avatar} 
+                    alt={boardPersona?.name || currentPersona.name} 
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <User size={21} weight="regular" className="text-[#1A1B25]" />
+                )}
+              </button>
+
+              {/* Profile Menu Dropdown */}
+              {isProfileMenuOpen && (
+                <div className="absolute right-0 mt-2 w-64 bg-white border border-[#ECEFF3] rounded-2xl shadow-xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  {/* Active user header - clicking navigates to the owner or member view of the board */}
+                  <div 
+                    onClick={() => {
+                      setIsProfileMenuOpen(false);
+                      const isOwner = (boardPersona?.role || currentPersona.role) === 'owner' || currentPersona.id === boardOwnerPersona.id;
+                      if (isOwner) {
+                        if (onNavigateToOwnerView) {
+                          onNavigateToOwnerView();
+                        } else if (onSelectPersona) {
+                          onSelectPersona(boardOwnerPersona);
+                        }
+                      } else {
+                        if (onNavigateToMemberView) {
+                          onNavigateToMemberView(boardPersona || currentPersona);
+                        } else if (onSelectPersona) {
+                          onSelectPersona(boardPersona || currentPersona);
+                        }
+                      }
+                    }}
+                    className="px-3.5 py-2.5 border-b border-[#ECEFF3] flex items-center gap-3 cursor-pointer hover:bg-[#F6F8FA] transition group select-none rounded-t-2xl font-['Nunito']"
+                    role="button"
+                    tabIndex={0}
+                    title="Click to view board"
+                    aria-label="View Board"
+                  >
+                    <img 
+                      src={boardPersona?.avatar || currentPersona.avatar} 
+                      alt={boardPersona?.name || currentPersona.name} 
+                      className="w-10 h-10 rounded-full object-cover ring-2 ring-amber-400 shrink-0 group-hover:ring-amber-500 transition"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-extrabold text-sm text-[#1A1B25] truncate flex items-center gap-1.5">
+                        <span>{boardPersona?.name || currentPersona.name}</span>
+                        {boardPersona?.name && boardPersona.name !== currentPersona.name && (
+                          <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded-md">
+                            Board Name
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-[#666D80] flex items-center gap-1.5 truncate">
+                        <span className="capitalize font-semibold">{boardPersona?.role || currentPersona.role}</span>
+                        <span>· {boardOwnerPersona.id === currentPersona.id ? 'Board Owner' : 'Joined Member'}</span>
+                      </div>
+                      <div className="text-[10px] text-amber-700 font-bold flex items-center gap-0.5 mt-0.5">
+                        <span>{boardOwnerPersona.id === currentPersona.id || (boardPersona?.role || currentPersona.role) === 'owner' ? 'Owner View · Board' : 'Member View · Board'}</span>
+                        <CaretRight size={10} weight="bold" className="group-hover:translate-x-0.5 transition-transform" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Real Board Participants (Owner & Actual Joined Invitees Only) */}
+                  {hasBoards && (
+                    <>
+                      <div className="px-3.5 pt-2 pb-1 flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-[#808897] uppercase tracking-wider font-['Nunito']">
+                      Board Participants ({realBoardParticipants.length})
+                    </span>
+                    <span className="text-[10px] font-semibold text-[#808897] font-['Nunito']">
+                      Click to switch view
+                    </span>
+                  </div>
+                  <div className="py-1 px-1.5 max-h-56 overflow-y-auto space-y-1">
+                    {realBoardParticipants.map((p) => {
+                      const isOwner = p.id === boardOwnerPersona.id || p.role === 'owner';
+                      const isCurrent = currentPersona.id === p.id && (isOwner ? currentPersona.role === 'owner' : currentPersona.role !== 'owner');
+
+                      return (
+                        <div
+                          key={p.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => {
+                            setIsProfileMenuOpen(false);
+                            if (isOwner) {
+                              if (onNavigateToOwnerView) {
+                                onNavigateToOwnerView();
+                              } else if (onSelectPersona) {
+                                onSelectPersona({ ...p, role: 'owner' });
+                              }
+                            } else {
+                              if (onNavigateToMemberView) {
+                                onNavigateToMemberView({ ...p, role: 'member' });
+                              } else if (onSelectPersona) {
+                                onSelectPersona({ ...p, role: 'member' });
+                              }
+                            }
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-2xl text-left transition cursor-pointer select-none font-['Nunito'] group ${
+                            isCurrent
+                              ? 'bg-[#ECEFF3] text-[#1A1B25] font-extrabold'
+                              : 'bg-[#F8F9FB] hover:bg-[#F6F8FA] text-[#353849]'
+                          }`}
+                          title={isOwner ? 'Open Owner View of this board' : `Open Member View for ${p.name}`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="relative shrink-0">
+                              <img 
+                                src={p.avatar} 
+                                alt={p.name} 
+                                className={`w-8 h-8 rounded-full object-cover shrink-0 ${
+                                  isOwner ? 'ring-2 ring-amber-400' : 'ring-1 ring-[#DFE1E6]'
+                                }`} 
+                              />
+                              {isOwner && (
+                                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#1A1B25] text-amber-300 flex items-center justify-center">
+                                  <Crown size={10} weight="fill" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0 truncate">
+                              <div className="font-extrabold text-xs leading-tight truncate flex items-center gap-1.5 text-[#1A1B25]">
+                                <span>{p.name}</span>
+                              </div>
+                              <div className="text-[10px] text-[#666D80] flex items-center gap-1 mt-0.5">
+                                <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
+                                  isOwner 
+                                    ? 'bg-[#272835] text-white' 
+                                    : 'bg-[#DFE1E6] text-[#353849]'
+                                }`}>
+                                  {isOwner ? 'Owner View' : 'Member View'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 ml-2 shrink-0">
+                            {isCurrent ? (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#1A1B25] text-white">
+                                <Check size={11} weight="bold" />
+                                <span>Active</span>
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#ECEFF3] text-[#1A1B25] group-hover:bg-[#1A1B25] group-hover:text-white transition">
+                                <span>{isOwner ? 'Owner' : 'Member'}</span>
+                                <CaretRight size={10} weight="bold" />
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {joinedInviteParticipants.length === 0 && (
+                      <div className="px-3.5 py-2 text-[11px] text-[#808897] bg-[#F8F9FB] mx-1 my-1 rounded-xl font-['Nunito']">
+                        No guests have joined yet. Share the invite link below to invite friends!
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+                  {/* Extra Utility Actions */}
+                  <div className="border-t border-[#ECEFF3] pt-1.5 mt-1 px-1.5 space-y-0.5">
+                    {isUserAuthenticated && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetUser = boardPersona || currentPersona;
+                          onOpenUserProfile?.(targetUser);
+                          setIsProfileMenuOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs text-[#353849] hover:bg-[#F6F8FA] font-bold transition cursor-pointer"
+                      >
+                        <User size={16} weight="bold" className="text-[#666D80]" />
+                        <span>View Registered Profile</span>
+                      </button>
+                    )}
+
+                    {onNavigateToLanding && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsProfileMenuOpen(false);
+                          onNavigateToLanding();
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs text-[#353849] hover:bg-[#F6F8FA] font-bold transition cursor-pointer"
+                      >
+                        <span className="text-sm">📋</span>
+                        <span>Plan Board Home</span>
+                      </button>
+                    )}
+
+                    {isUserAuthenticated && (
+                      <>
+                        <div className="border-t border-[#ECEFF3] my-1" />
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsProfileMenuOpen(false);
+                            onLogout?.();
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs text-rose-600 hover:bg-rose-50 font-bold transition cursor-pointer group"
+                          title="Log out of your account"
+                        >
+                          <LogOut className="w-4 h-4 text-rose-600 shrink-0 group-hover:scale-105 transition-transform" />
+                          <span>Log Out</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ========================================================
+              MOBILE VIEW: Move actions into a hamburger menu (sm:hidden)
+          ======================================================== */}
+          <div className="relative sm:hidden" ref={mobileMenuRef}>
+            <button
               type="button"
               onClick={() => {
-                setIsProfileMenuOpen((prev) => !prev);
+                setIsMobileMenuOpen((prev) => !prev);
+                setIsProfileMenuOpen(false);
                 setIsBoardModalOpen(false);
               }}
-              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] flex items-center justify-center text-[#1A1B25] transition-colors cursor-pointer active:scale-95 select-none overflow-hidden ring-2 ring-transparent hover:ring-amber-300"
-              title="Profile & user switcher"
-              aria-label="User profile and account switcher"
-              aria-expanded={isProfileMenuOpen}
-              aria-haspopup="true"
+              className="w-10 h-10 rounded-full bg-[#F6F8FA] hover:bg-[#ECEFF3] flex items-center justify-center text-[#1A1B25] transition-colors cursor-pointer active:scale-95 select-none relative"
+              aria-label={isMobileMenuOpen ? "Close menu" : "Open actions menu"}
+              aria-expanded={isMobileMenuOpen}
             >
-              {(boardPersona?.avatar || currentPersona.avatar) ? (
+              {isMobileMenuOpen ? (
+                <LucideX className="w-5 h-5 text-[#1A1B25]" />
+              ) : (
+                <Menu className="w-5 h-5 text-[#1A1B25]" />
+              )}
+              {/* Subtle avatar indicator on the mobile menu button */}
+              {(boardPersona?.avatar || currentPersona.avatar) && !isMobileMenuOpen && (
                 <img 
                   src={boardPersona?.avatar || currentPersona.avatar} 
-                  alt={boardPersona?.name || currentPersona.name} 
-                  className="w-full h-full object-cover"
+                  alt="" 
+                  className="w-3.5 h-3.5 rounded-full object-cover ring-1 ring-white absolute -bottom-0.5 -right-0.5" 
                 />
-              ) : (
-                <User size={21} weight="regular" className="text-[#1A1B25]" />
               )}
             </button>
 
-            {/* Profile Menu Dropdown */}
-            {isProfileMenuOpen && (
-              <div className="absolute right-0 mt-2 w-64 bg-white border border-[#ECEFF3] rounded-2xl shadow-xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                {/* Active user header - clicking navigates to the owner or member view of the board */}
+            {/* Mobile Hamburger Menu Dropdown */}
+            {isMobileMenuOpen && (
+              <div className="absolute right-0 mt-2 w-72 max-w-[calc(100vw-2rem)] bg-white border border-[#ECEFF3] rounded-2xl shadow-xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150 max-h-[82vh] overflow-y-auto font-['Nunito']">
+                
+                {/* 1. Share Board Action - only if boards exist */}
+                {hasBoards && (
+                  <div className="px-2 pb-1.5 border-b border-[#ECEFF3]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        onOpenShare();
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#F8F9FB] hover:bg-[#ECEFF3] text-left transition cursor-pointer group"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-[#1A1B25] shadow-2xs shrink-0 group-hover:scale-105 transition-transform">
+                        <ShareFat size={18} weight="bold" className="text-[#1A1B25]" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-extrabold text-[#1A1B25]">Share Board</div>
+                        <div className="text-[10px] text-[#666D80]">Invite friends with board link</div>
+                      </div>
+                      <CaretRight size={12} weight="bold" className="text-[#808897]" />
+                    </button>
+                  </div>
+                )}
+
+                {/* 2. Active User Profile Header */}
                 <div 
                   onClick={() => {
-                    setIsProfileMenuOpen(false);
+                    setIsMobileMenuOpen(false);
                     const isOwner = (boardPersona?.role || currentPersona.role) === 'owner' || currentPersona.id === boardOwnerPersona.id;
                     if (isOwner) {
                       if (onNavigateToOwnerView) {
@@ -526,187 +859,158 @@ export const Header: React.FC<HeaderProps> = ({
                       }
                     }
                   }}
-                  className="px-3.5 py-2.5 border-b border-[#ECEFF3] flex items-center gap-3 cursor-pointer hover:bg-[#F6F8FA] transition group select-none rounded-t-2xl font-['Nunito']"
+                  className="px-3.5 py-2.5 border-b border-[#ECEFF3] flex items-center gap-3 cursor-pointer hover:bg-[#F6F8FA] transition group select-none"
                   role="button"
                   tabIndex={0}
-                  title="Click to view board"
-                  aria-label="View Board"
                 >
                   <img 
                     src={boardPersona?.avatar || currentPersona.avatar} 
                     alt={boardPersona?.name || currentPersona.name} 
-                    className="w-10 h-10 rounded-full object-cover ring-2 ring-amber-400 shrink-0 group-hover:ring-amber-500 transition"
+                    className="w-9 h-9 rounded-full object-cover ring-2 ring-amber-400 shrink-0"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="font-extrabold text-sm text-[#1A1B25] truncate flex items-center gap-1.5">
-                      <span>{boardPersona?.name || currentPersona.name}</span>
-                      {boardPersona?.name && boardPersona.name !== currentPersona.name && (
-                        <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded-md">
-                          Board Name
-                        </span>
-                      )}
+                    <div className="font-extrabold text-xs text-[#1A1B25] truncate">
+                      {boardPersona?.name || currentPersona.name}
                     </div>
-                    <div className="text-[11px] text-[#666D80] flex items-center gap-1.5 truncate">
+                    <div className="text-[10px] text-[#666D80] flex items-center gap-1 mt-0.5">
                       <span className="capitalize font-semibold">{boardPersona?.role || currentPersona.role}</span>
-                      <span>· {boardOwnerPersona.id === currentPersona.id ? 'Board Owner' : 'Joined Member'}</span>
-                    </div>
-                    <div className="text-[10px] text-amber-700 font-bold flex items-center gap-0.5 mt-0.5">
-                      <span>{boardOwnerPersona.id === currentPersona.id || (boardPersona?.role || currentPersona.role) === 'owner' ? 'Owner View · Board' : 'Member View · Board'}</span>
-                      <CaretRight size={10} weight="bold" className="group-hover:translate-x-0.5 transition-transform" />
+                      <span>·</span>
+                      <span className="text-amber-800 font-bold">
+                        {boardOwnerPersona.id === currentPersona.id || (boardPersona?.role || currentPersona.role) === 'owner' ? 'Owner View' : 'Member View'}
+                      </span>
                     </div>
                   </div>
+                  <CaretRight size={12} weight="bold" className="text-[#808897]" />
                 </div>
 
-                {/* Real Board Participants (Owner & Actual Joined Invitees Only) */}
-                <div className="px-3.5 pt-2 pb-1 flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-[#808897] uppercase tracking-wider font-['Nunito']">
-                    Board Participants ({realBoardParticipants.length})
-                  </span>
-                  <span className="text-[10px] font-semibold text-[#808897] font-['Nunito']">
-                    Click to switch view
-                  </span>
-                </div>
-                <div className="py-1 px-1.5 max-h-56 overflow-y-auto space-y-1">
-                  {realBoardParticipants.map((p) => {
-                    const isOwner = p.id === boardOwnerPersona.id || p.role === 'owner';
-                    const isCurrent = currentPersona.id === p.id && (isOwner ? currentPersona.role === 'owner' : currentPersona.role !== 'owner');
+                {/* 3. Real Board Participants Switcher - only if boards exist */}
+                {hasBoards && (
+                  <>
+                    <div className="px-3.5 pt-2 pb-1 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-[#808897] uppercase tracking-wider">
+                        Board Participants ({realBoardParticipants.length})
+                      </span>
+                      <span className="text-[10px] font-semibold text-[#808897]">
+                        Switch view
+                      </span>
+                    </div>
+                    <div className="py-1 px-1.5 max-h-48 overflow-y-auto space-y-1">
+                      {realBoardParticipants.map((p) => {
+                        const isOwner = p.id === boardOwnerPersona.id || p.role === 'owner';
+                        const isCurrent = currentPersona.id === p.id && (isOwner ? currentPersona.role === 'owner' : currentPersona.role !== 'owner');
 
-                    return (
-                      <div
-                        key={p.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => {
-                          setIsProfileMenuOpen(false);
-                          if (isOwner) {
-                            if (onNavigateToOwnerView) {
-                              onNavigateToOwnerView();
-                            } else if (onSelectPersona) {
-                              onSelectPersona({ ...p, role: 'owner' });
-                            }
-                          } else {
-                            if (onNavigateToMemberView) {
-                              onNavigateToMemberView({ ...p, role: 'member' });
-                            } else if (onSelectPersona) {
-                              onSelectPersona({ ...p, role: 'member' });
-                            }
-                          }
-                        }}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-2xl text-left transition cursor-pointer select-none font-['Nunito'] group ${
-                          isCurrent
-                            ? 'bg-[#ECEFF3] text-[#1A1B25] font-extrabold'
-                            : 'bg-[#F8F9FB] hover:bg-[#F6F8FA] text-[#353849]'
-                        }`}
-                        title={isOwner ? 'Open Owner View of this board' : `Open Member View for ${p.name}`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="relative shrink-0">
-                            <img 
-                              src={p.avatar} 
-                              alt={p.name} 
-                              className={`w-8 h-8 rounded-full object-cover shrink-0 ${
-                                isOwner ? 'ring-2 ring-amber-400' : 'ring-1 ring-[#DFE1E6]'
-                              }`} 
-                            />
-                            {isOwner && (
-                              <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#1A1B25] text-amber-300 flex items-center justify-center">
-                                <Crown size={10} weight="fill" />
+                        return (
+                          <div
+                            key={p.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => {
+                              setIsMobileMenuOpen(false);
+                              if (isOwner) {
+                                if (onNavigateToOwnerView) {
+                                  onNavigateToOwnerView();
+                                } else if (onSelectPersona) {
+                                  onSelectPersona({ ...p, role: 'owner' });
+                                }
+                              } else {
+                                if (onNavigateToMemberView) {
+                                  onNavigateToMemberView({ ...p, role: 'member' });
+                                } else if (onSelectPersona) {
+                                  onSelectPersona({ ...p, role: 'member' });
+                                }
+                              }
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-2xl text-left transition cursor-pointer select-none group ${
+                              isCurrent
+                                ? 'bg-[#ECEFF3] text-[#1A1B25] font-extrabold'
+                                : 'bg-[#F8F9FB] hover:bg-[#F6F8FA] text-[#353849]'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <img 
+                                src={p.avatar} 
+                                alt={p.name} 
+                                className={`w-7 h-7 rounded-full object-cover shrink-0 ${
+                                  isOwner ? 'ring-2 ring-amber-400' : 'ring-1 ring-[#DFE1E6]'
+                                }`} 
+                              />
+                              <div className="min-w-0 truncate">
+                                <div className="font-extrabold text-xs leading-tight truncate text-[#1A1B25]">
+                                  <span>{p.name}</span>
+                                </div>
+                                <div className="text-[9px] text-[#666D80] mt-0.5">
+                                  {isOwner ? 'Owner' : 'Member'}
+                                </div>
                               </div>
+                            </div>
+                            {isCurrent && (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-[#1A1B25] text-white shrink-0">
+                                <Check size={10} weight="bold" />
+                                <span>Active</span>
+                              </span>
                             )}
                           </div>
-                          <div className="min-w-0 truncate">
-                            <div className="font-extrabold text-xs leading-tight truncate flex items-center gap-1.5 text-[#1A1B25]">
-                              <span>{p.name}</span>
-                            </div>
-                            <div className="text-[10px] text-[#666D80] flex items-center gap-1 mt-0.5">
-                              <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
-                                isOwner 
-                                  ? 'bg-[#272835] text-white' 
-                                  : 'bg-[#DFE1E6] text-[#353849]'
-                              }`}>
-                                {isOwner ? 'Owner View' : 'Member View'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5 ml-2 shrink-0">
-                          {isCurrent ? (
-                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#1A1B25] text-white">
-                              <Check size={11} weight="bold" />
-                              <span>Active</span>
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#ECEFF3] text-[#1A1B25] group-hover:bg-[#1A1B25] group-hover:text-white transition">
-                              <span>{isOwner ? 'Owner' : 'Member'}</span>
-                              <CaretRight size={10} weight="bold" />
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {joinedInviteParticipants.length === 0 && (
-                    <div className="px-3.5 py-2 text-[11px] text-[#808897] bg-[#F8F9FB] mx-1 my-1 rounded-xl font-['Nunito']">
-                      No guests have joined yet. Share the invite link below to invite friends!
+                        );
+                      })}
                     </div>
+                  </>
+                )}
+
+                {/* 4. Extra Utility Actions */}
+                <div className="border-t border-[#ECEFF3] pt-1.5 mt-1 px-1.5 space-y-0.5">
+                  {isUserAuthenticated && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetUser = boardPersona || currentPersona;
+                        onOpenUserProfile?.(targetUser);
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs text-[#353849] hover:bg-[#F6F8FA] font-bold transition cursor-pointer"
+                    >
+                      <User size={16} weight="bold" className="text-[#666D80]" />
+                      <span>View Registered Profile</span>
+                    </button>
+                  )}
+
+                  {onNavigateToLanding && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        onNavigateToLanding();
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs text-[#353849] hover:bg-[#F6F8FA] font-bold transition cursor-pointer"
+                    >
+                      <span className="text-sm">📋</span>
+                      <span>Plan Board Home</span>
+                    </button>
+                  )}
+
+                  {isUserAuthenticated && (
+                    <>
+                      <div className="border-t border-[#ECEFF3] my-1" />
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMobileMenuOpen(false);
+                          onLogout?.();
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs text-rose-600 hover:bg-rose-50 font-bold transition cursor-pointer group"
+                        title="Log out of your account"
+                      >
+                        <LogOut className="w-4 h-4 text-rose-600 shrink-0 group-hover:scale-105 transition-transform" />
+                        <span>Log Out</span>
+                      </button>
+                    </>
                   )}
                 </div>
 
-                {/* Extra Utility Actions moved here */}
-                <div className="border-t border-[#ECEFF3] pt-1.5 mt-1 px-1.5 space-y-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const targetUser = boardPersona || currentPersona;
-                      onOpenUserProfile?.(targetUser);
-                      setIsProfileMenuOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs text-[#353849] hover:bg-[#F6F8FA] font-bold transition cursor-pointer"
-                  >
-                    <User size={16} weight="bold" className="text-[#666D80]" />
-                    <span>View Registered Profile</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenJoinFlow();
-                      setIsProfileMenuOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs text-amber-900 hover:bg-amber-50 font-bold transition cursor-pointer"
-                  >
-                    <DeviceMobile size={16} weight="bold" className="text-amber-600" />
-                    <span>Test Guest Invite Link</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenMyPlans();
-                      setIsProfileMenuOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs text-[#353849] hover:bg-[#F6F8FA] font-bold transition cursor-pointer"
-                  >
-                    <FolderSimple size={16} weight="bold" className="text-[#666D80]" />
-                    <span>My Saved Plans</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenCreatePlan();
-                      setIsProfileMenuOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-xs text-[#353849] hover:bg-[#F6F8FA] font-bold transition cursor-pointer"
-                  >
-                    <Plus size={16} weight="bold" className="text-[#666D80]" />
-                    <span>Create New Plan</span>
-                  </button>
-                </div>
               </div>
             )}
           </div>
+
         </div>
       </div>
     </header>

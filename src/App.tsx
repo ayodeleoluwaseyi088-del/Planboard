@@ -29,6 +29,11 @@ import {
   saveActiveBoardId,
   getStoredAuthUser,
   saveStoredAuthUser,
+  isStoredUserAuthenticated,
+  setStoredUserAuthenticated,
+  logOutStoredUser,
+  getUserBoards,
+  isDummyBoard,
 } from './utils/boardStorage';
 import {
   isPlanMatchingItem,
@@ -51,6 +56,8 @@ import { TimelineSection } from './components/TimelineSection';
 import { PeopleSection } from './components/PeopleSection';
 import { ActivityFeed } from './components/ActivityFeed';
 import { FloatingNav } from './components/FloatingNav';
+import { LandingPage } from './components/LandingPage';
+import { BoardEmptyState } from './components/BoardEmptyState';
 import { BoardSectionTab } from './types';
 
 // Motion and Phosphor icons
@@ -67,6 +74,8 @@ import { CreateItemModal } from './components/CreateItemModal';
 import { MyPlansModal } from './components/MyPlansModal';
 import { AddSuggestionModal } from './components/AddSuggestionModal';
 import { UserProfileModal } from './components/UserProfileModal';
+import { AuthModal } from './components/AuthModal';
+import { JoinBoardModal } from './components/JoinBoardModal';
 import { BOARD_AVATARS } from './utils/boardAvatars';
 
 export default function App() {
@@ -81,6 +90,17 @@ export default function App() {
     return stored[0] || INITIAL_BOARD;
   });
   const [currentPersona, setCurrentPersona] = useState<UserPersona>(() => getStoredAuthUser());
+
+  // Authentication State
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => isStoredUserAuthenticated());
+
+  // User's actual boards: real boards owned by or joined by the current user (excluding default/dummy boards)
+  const userBoards = useMemo(() => {
+    if (!isAuthenticated || !currentPersona) return [];
+    return getUserBoards(currentPersona).all;
+  }, [allBoards, isAuthenticated, currentPersona]);
+
+  const userHasBoards = isAuthenticated && userBoards.length > 0;
 
   // Active member on the current board (with board-specific custom name and avatar if configured)
   const currentBoardMember = useMemo(() => {
@@ -101,6 +121,89 @@ export default function App() {
   }, [currentBoardMember, currentPersona]);
   const [activeEvolutionDay, setActiveEvolutionDay] = useState<'day1' | 'day3' | 'day5'>('day3');
   const [activeSection, setActiveSection] = useState<BoardSectionTab>('overview');
+
+  // Navigation View State: 'landing' (direct visit) or 'board' (active planning board)
+  const [currentView, setCurrentView] = useState<'landing' | 'board'>(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const hasJoinParam = Boolean(
+        urlParams.get('join') ||
+        urlParams.get('boardId') ||
+        urlParams.get('joinBoard') ||
+        urlParams.get('plan') ||
+        (window.location.hash && (window.location.hash.includes('join/') || window.location.hash.includes('join=')))
+      );
+      if (hasJoinParam) {
+        return 'board';
+      }
+    }
+    return 'landing';
+  });
+
+  // Keep active board in sync if current board was deleted
+  useEffect(() => {
+    if (board && board.id) {
+      const exists = allBoards.some((b) => b.id === board.id);
+      if (!exists && userBoards.length > 0 && userBoards[0]) {
+        setBoard(userBoards[0]);
+        saveActiveBoardId(userBoards[0].id);
+      }
+    }
+  }, [allBoards, userBoards, board.id]);
+
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
+  const [authPromptText, setAuthPromptText] = useState<string | undefined>(undefined);
+  const [pendingAuthAction, setPendingAuthAction] = useState<(() => void) | null>(null);
+  const [isJoinBoardModalOpen, setIsJoinBoardModalOpen] = useState(false);
+
+  // Authentication success callback:
+  // After successful authentication (login or create account), take the user directly to the Board section.
+  // Do not redirect them back to Home.
+  const handleAuthSuccess = (user: UserPersona, _isNewAccount: boolean = false) => {
+    setCurrentPersona(user);
+    setIsAuthenticated(true);
+    setStoredUserAuthenticated(true);
+    saveStoredAuthUser(user);
+
+    // Take user directly to Board section (shows BoardEmptyState if no boards yet)
+    setCurrentView('board');
+    setPendingAuthAction(null);
+  };
+
+  // Logout handler
+  const handleLogout = () => {
+    logOutStoredUser();
+    setIsAuthenticated(false);
+    setCurrentView('landing');
+  };
+
+  // Protected handler to open board creation modal
+  const handleOpenCreatePlanProtected = () => {
+    if (!isAuthenticated) {
+      setAuthModalMode('signup');
+      setAuthPromptText('Create an account to start your first plan board.');
+      setPendingAuthAction(() => () => {
+        setEditingBoard(null);
+        setIsCreatePlanOpen(true);
+      });
+      setIsAuthModalOpen(true);
+    } else {
+      setEditingBoard(null);
+      setIsCreatePlanOpen(true);
+    }
+  };
+
+  // Navigate directly to the Board section for users with existing boards
+  const handleSeeBoards = () => {
+    if (userHasBoards) {
+      if (userBoards[0] && !userBoards.some((b) => b.id === board.id)) {
+        setBoard(userBoards[0]);
+        saveActiveBoardId(userBoards[0].id);
+      }
+      setCurrentView('board');
+    }
+  };
 
   const handleNavigateToSection = (tab: BoardSectionTab) => {
     setActiveSection(tab);
@@ -129,8 +232,13 @@ export default function App() {
   const handleDeleteBoard = (boardId: string) => {
     const remaining = deleteStoredBoard(boardId);
     setAllBoards(remaining);
-    if (board.id === boardId) {
-      const nextBoard = remaining[0] || INITIAL_BOARD;
+    const remainingUserBoards = remaining.filter(
+      (b) => b.ownerId === currentPersona.id || b.members?.some((m) => m.id === currentPersona.id)
+    );
+    if (remainingUserBoards.length === 0) {
+      setCurrentView('board');
+    } else if (board.id === boardId) {
+      const nextBoard = remainingUserBoards[0] || remaining[0] || INITIAL_BOARD;
       setBoard(nextBoard);
       saveActiveBoardId(nextBoard.id);
     }
@@ -240,6 +348,7 @@ export default function App() {
           setBoard(found);
           saveActiveBoardId(found.id);
           setIsJoinFlowOpen(true);
+          setCurrentView('board');
         }
       }
     } catch (err) {
@@ -2136,6 +2245,7 @@ export default function App() {
       emoji: newBoardData.emoji || '🎉',
       coverImage: newBoardData.coverImage || INITIAL_BOARD.coverImage,
       coverImagePosition: newBoardData.coverImagePosition,
+      isPublic: Boolean(newBoardData.isPublic),
       // Date and Time are purely optional and ONLY populated if an attached plan has it
       date: planWithSchedule?.date,
       time: planWithSchedule?.time,
@@ -2185,6 +2295,7 @@ export default function App() {
     setAllBoards((prev) => [newBoard, ...prev.filter((b) => b.id !== newBoard.id)]);
     setBoard(newBoard);
     setIsCreatePlanOpen(false);
+    setCurrentView('board');
   };
 
   // 13. Add Planning Item
@@ -2304,6 +2415,67 @@ export default function App() {
     );
   }
 
+  // Single-Page Landing Page for users visiting directly
+  if (currentView === 'landing') {
+    return (
+      <>
+        <LandingPage
+          onOpenCreateBoard={handleOpenCreatePlanProtected}
+          onOpenJoinBoard={() => setIsJoinBoardModalOpen(true)}
+          onOpenAuthModal={(mode) => {
+            setAuthModalMode(mode);
+            setAuthPromptText(undefined);
+            setPendingAuthAction(null);
+            setIsAuthModalOpen(true);
+          }}
+          onSeeBoards={handleSeeBoards}
+          hasBoards={userHasBoards}
+          isAuthenticated={isAuthenticated}
+          currentUser={effectivePersona}
+          featuredBoard={board}
+          onLogout={handleLogout}
+          onVote={handleVote}
+          onFinalizeDecision={handleFinalizeDecision}
+          onReopenDecision={handleReopenDecision}
+          onParticipateFunDecider={handleParticipateFunDecider}
+          onReopenFunDecider={handleReopenFunDecider}
+          onFinalizeFunDecider={handleFinalizeFunDecider}
+          onUndoFinalizeFunDecider={handleUndoFinalizeFunDecider}
+          onUpdateParticipantStatus={handleUpdateParticipantStatus}
+          onVolunteerForTask={handleVolunteerForTask}
+          onToggleTaskComplete={handleToggleTaskComplete}
+          onRemovePlan={handleRemovePlan}
+        />
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => {
+            setIsAuthModalOpen(false);
+            setPendingAuthAction(null);
+          }}
+          onSuccess={handleAuthSuccess}
+          initialMode={authModalMode}
+          actionPrompt={authPromptText}
+        />
+        <JoinBoardModal
+          isOpen={isJoinBoardModalOpen}
+          onClose={() => setIsJoinBoardModalOpen(false)}
+          availableBoards={allBoards}
+          allBoards={allBoards}
+          onJoinBoard={(boardId) => {
+            const stored = getAllStoredBoards();
+            const found = stored.find((b) => b.id === boardId) || allBoards.find((b) => b.id === boardId);
+            if (found) {
+              setBoard(found);
+              saveActiveBoardId(boardId);
+              setCurrentView('board');
+              setIsJoinFlowOpen(true);
+            }
+          }}
+        />
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#FFFFFF] flex flex-col selection:bg-amber-100 selection:text-amber-900">
       {/* Simplified Top Navbar: Board Switcher (Left) and Share / Profile (Right) */}
@@ -2313,6 +2485,16 @@ export default function App() {
         boardPersona={effectivePersona}
         allPersonas={USER_PERSONAS}
         allBoards={allBoards}
+        isAuthenticated={isAuthenticated}
+        hasBoards={userHasBoards}
+        onNavigateToLanding={() => setCurrentView('landing')}
+        onLogout={handleLogout}
+        onRequireAuth={(action) => {
+          setAuthModalMode('login');
+          setAuthPromptText('Please log in or create an account to create your board.');
+          setPendingAuthAction(() => action);
+          setIsAuthModalOpen(true);
+        }}
         onSelectBoard={(boardId) => {
           const stored = getAllStoredBoards();
           const found = stored.find((b) => b.id === boardId) || allBoards.find((b) => b.id === boardId);
@@ -2323,24 +2505,28 @@ export default function App() {
         }}
         onSelectPersona={handleSelectPersona}
         onOpenMyPlans={() => setIsMyPlansOpen(true)}
-        onOpenCreatePlan={() => {
-          setEditingBoard(null);
-          setIsCreatePlanOpen(true);
-        }}
+        onOpenCreatePlan={handleOpenCreatePlanProtected}
         onEditBoard={(boardToEdit) => {
           setEditingBoard(boardToEdit);
           setIsCreatePlanOpen(true);
         }}
         onOpenShare={() => setIsShareOpen(true)}
         onOpenJoinFlow={() => setIsJoinFlowOpen(true)}
+        onOpenJoinBoard={() => setIsJoinBoardModalOpen(true)}
         onDeleteBoard={handleDeleteBoard}
         onOpenUserProfile={(targetPersona) => setViewingProfileUser(targetPersona)}
         onNavigateToOwnerView={handleNavigateToOwnerView}
         onNavigateToMemberView={handleNavigateToMemberView}
       />
 
-      {/* Main Board Container with dedicated section views */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-6 pb-28 sm:pb-32">
+      {/* If an authenticated user is accessing their own boards section and has no boards, render BoardEmptyState.
+          Visitors joining or viewing an active community/shared board are taken directly to the board and its content. */}
+      {isAuthenticated && userBoards.length === 0 && !board?.members?.some((m) => m.id === currentPersona.id) && !currentPersona.isGuest ? (
+        <BoardEmptyState onCreatePlanBoard={handleOpenCreatePlanProtected} />
+      ) : (
+        <>
+          {/* Main Board Container with dedicated section views */}
+          <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-6 pb-28 sm:pb-32">
         <AnimatePresence mode="wait">
           {/* 1. OVERVIEW SECTION */}
           {activeSection === 'overview' && (
@@ -2542,14 +2728,16 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {/* Centralized Floating Navigation Component (Image 1 reference) */}
-      <FloatingNav
-        activeSection={activeSection}
-        onChangeSection={handleNavigateToSection}
-        pendingDecisionsCount={pendingDecisionsForUser.length}
-        suggestionsCount={board.suggestions.length}
-        openTasksCount={board.tasks.filter((t) => t.status !== 'completed').length}
-      />
+          {/* Centralized Floating Navigation Component (Image 1 reference) */}
+          <FloatingNav
+            activeSection={activeSection}
+            onChangeSection={handleNavigateToSection}
+            pendingDecisionsCount={pendingDecisionsForUser.length}
+            suggestionsCount={board.suggestions.length}
+            openTasksCount={board.tasks.filter((t) => t.status !== 'completed').length}
+          />
+        </>
+      )}
 
       {/* Modals & Dialogs */}
       <ShareModal
@@ -2615,8 +2803,7 @@ export default function App() {
         }}
         onOpenCreatePlan={() => {
           setIsMyPlansOpen(false);
-          setEditingBoard(null);
-          setIsCreatePlanOpen(true);
+          handleOpenCreatePlanProtected();
         }}
         onEditBoard={(boardToEdit) => {
           setIsMyPlansOpen(false);
@@ -2625,6 +2812,34 @@ export default function App() {
         }}
         onDeleteBoard={handleDeleteBoard}
         currentPersona={currentPersona}
+      />
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => {
+          setIsAuthModalOpen(false);
+          setPendingAuthAction(null);
+        }}
+        onSuccess={handleAuthSuccess}
+        initialMode={authModalMode}
+        actionPrompt={authPromptText}
+      />
+
+      <JoinBoardModal
+        isOpen={isJoinBoardModalOpen}
+        onClose={() => setIsJoinBoardModalOpen(false)}
+        availableBoards={allBoards}
+        allBoards={allBoards}
+        onJoinBoard={(boardId) => {
+          const stored = getAllStoredBoards();
+          const found = stored.find((b) => b.id === boardId) || allBoards.find((b) => b.id === boardId);
+          if (found) {
+            setBoard(found);
+            saveActiveBoardId(boardId);
+            setCurrentView('board');
+            setIsJoinFlowOpen(true);
+          }
+        }}
       />
 
       {viewingProfileUser && (

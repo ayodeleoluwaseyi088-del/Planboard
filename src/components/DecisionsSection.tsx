@@ -1565,15 +1565,6 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
 
   return (
     <section id="decisions-section" className="mb-12 scroll-mt-20">
-      {/* Section Header */}
-      <div className="flex flex-col items-center justify-center text-center mb-6">
-        <div>
-          <p className="text-sm sm:text-base text-[#666D80] font-normal leading-normal text-center">
-            Swipe the card to move to the next decision
-          </p>
-        </div>
-      </div>
-
       {totalCount === 0 ? (
         <div className="w-full py-16 sm:py-24 flex flex-col items-center justify-center text-center select-none">
           <Vote className="w-9 h-9 text-[#272835] stroke-[2.2] mb-4" />
@@ -1651,8 +1642,8 @@ export const DecisionsSection: React.FC<DecisionsSectionProps> = ({
               <span>Previous</span>
             </button>
 
-            <span className="text-xs font-bold text-[#808897] text-center">
-              Tap stacked cards or swipe to cycle
+            <span className="text-xs font-bold text-[#FFFFFF] in-[main]:text-[#808897] text-center">
+              Swipe the card to move to the next decision
             </span>
 
             <button

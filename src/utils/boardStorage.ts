@@ -4,11 +4,15 @@ import { INITIAL_BOARD, SARAH_WEDDING_BOARD, USER_PERSONAS } from '../mockData';
 const BOARDS_STORAGE_KEY = 'planboard_user_boards_v4';
 const ACTIVE_BOARD_ID_KEY = 'planboard_active_board_id_v4';
 const AUTH_USER_KEY = 'planboard_auth_user_v4';
+const IS_AUTH_LOGGED_IN_KEY = 'planboard_is_auth_logged_in_v4';
+const REGISTERED_ACCOUNTS_KEY = 'planboard_registered_accounts_v4';
 
 // In-memory runtime cache to ensure uninterrupted app state even if localStorage quota is exceeded
 let inMemoryBoardsCache: PlanBoard[] | null = null;
 let inMemoryActiveBoardId: string | null = null;
 let inMemoryAuthUser: UserPersona | null = null;
+let inMemoryIsLoggedIn: boolean | null = null;
+let inMemoryRegisteredAccounts: UserPersona[] | null = null;
 
 /**
  * Cleans up stale legacy storage keys from previous applet versions to free up quota.
@@ -426,3 +430,112 @@ export function saveStoredAuthUser(user: UserPersona): void {
     }
   }
 }
+
+/**
+ * Checks if a user is currently logged in with a real registered account (not unauthenticated visitor).
+ */
+export function isStoredUserAuthenticated(): boolean {
+  if (inMemoryIsLoggedIn !== null) return inMemoryIsLoggedIn;
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const val = window.localStorage?.getItem(IS_AUTH_LOGGED_IN_KEY) ||
+                window.sessionStorage?.getItem(IS_AUTH_LOGGED_IN_KEY);
+    // If not set, check if stored user is not guest
+    if (val !== null) {
+      const isAuth = val === 'true';
+      inMemoryIsLoggedIn = isAuth;
+      return isAuth;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Sets user authentication login status in storage.
+ */
+export function setStoredUserAuthenticated(isAuth: boolean): void {
+  inMemoryIsLoggedIn = isAuth;
+  if (typeof window === 'undefined') return;
+
+  try {
+    if (window.localStorage) {
+      window.localStorage.setItem(IS_AUTH_LOGGED_IN_KEY, isAuth ? 'true' : 'false');
+    }
+    if (window.sessionStorage) {
+      window.sessionStorage.setItem(IS_AUTH_LOGGED_IN_KEY, isAuth ? 'true' : 'false');
+    }
+  } catch {
+    // Memory cache maintained
+  }
+}
+
+/**
+ * Retrieves all registered user accounts (default personas + custom created accounts).
+ */
+export function getAllRegisteredAccounts(): UserPersona[] {
+  if (inMemoryRegisteredAccounts && inMemoryRegisteredAccounts.length > 0) {
+    return inMemoryRegisteredAccounts;
+  }
+
+  if (typeof window === 'undefined') {
+    return USER_PERSONAS;
+  }
+
+  try {
+    const raw = window.localStorage?.getItem(REGISTERED_ACCOUNTS_KEY) ||
+                window.sessionStorage?.getItem(REGISTERED_ACCOUNTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Ensure default personas are included
+        const map = new Map<string, UserPersona>();
+        USER_PERSONAS.forEach((p) => map.set(p.id, p));
+        parsed.forEach((p: UserPersona) => map.set(p.id, p));
+        const combined = Array.from(map.values());
+        inMemoryRegisteredAccounts = combined;
+        return combined;
+      }
+    }
+  } catch {
+    // Fall back to default
+  }
+
+  inMemoryRegisteredAccounts = USER_PERSONAS;
+  return USER_PERSONAS;
+}
+
+/**
+ * Saves a newly registered account to persistent storage.
+ */
+export function saveRegisteredAccount(user: UserPersona): void {
+  const current = getAllRegisteredAccounts();
+  const exists = current.some((a) => a.id === user.id || a.email?.toLowerCase() === user.email?.toLowerCase());
+  const updated = exists ? current.map((a) => (a.id === user.id ? user : a)) : [user, ...current];
+
+  inMemoryRegisteredAccounts = updated;
+  saveStoredAuthUser(user);
+  setStoredUserAuthenticated(true);
+
+  if (typeof window === 'undefined') return;
+  try {
+    if (window.localStorage) {
+      window.localStorage.setItem(REGISTERED_ACCOUNTS_KEY, JSON.stringify(updated));
+    }
+    if (window.sessionStorage) {
+      window.sessionStorage.setItem(REGISTERED_ACCOUNTS_KEY, JSON.stringify(updated));
+    }
+  } catch {
+    // Memory cache maintained
+  }
+}
+
+/**
+ * Logs out the current user session (returns to unauthenticated state).
+ */
+export function logOutStoredUser(): void {
+  setStoredUserAuthenticated(false);
+}
+
